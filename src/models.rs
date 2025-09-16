@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::{Condvar, Mutex};
 
 /// Enum representing the possible observed values of transport layer protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -8,9 +9,8 @@ pub enum TransportProtocol {
     /// User Datagram Protocol
     UDP,
     /// Unknown Protocol
-    Other
+    Other,
 }
-
 
 impl fmt::Display for TransportProtocol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -21,7 +21,7 @@ impl fmt::Display for TransportProtocol {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IPVersion {
     IPV4,
-    IPV6
+    IPV6,
 }
 
 impl fmt::Display for IPVersion {
@@ -82,12 +82,30 @@ pub enum ApplicationProtocol {
     #[allow(non_camel_case_types)]
     mDNS,
     /// not identified
-    Other
+    Other,
 }
 
 impl fmt::Display for ApplicationProtocol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = format!("{:?}", self);
         f.pad(&s)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SniffStatus {
+    RUNNING,
+    PAUSED,
+    STOPPED,
+}
+
+pub struct Signaller {
+    pub mutex: Mutex<SniffStatus>,
+    pub condvar: Condvar,
+}
+
+impl Signaller {
+    pub fn new(mutex: Mutex<SniffStatus>, condvar: Condvar) -> Signaller {
+        Signaller { mutex, condvar }
     }
 }
