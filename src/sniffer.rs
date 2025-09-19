@@ -1,4 +1,7 @@
-use crate::models::{ApplicationProtocol, IPVersion, Signaller, SniffStatus, TransportProtocol};
+use crate::models::{
+    ApplicationProtocol, IPVersion, PacketInfo, PacketLink, PacketLinkStats, Signaller,
+    SniffStatus, TrafficDirection, TransportProtocol,
+};
 use crate::sniffed_packet::SniffedPacket;
 use chrono::Local;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
@@ -7,6 +10,10 @@ use std::io::Write;
 use std::io::{BufWriter, stdout};
 use std::sync::Arc;
 
+/// Sniffer is responsible for capturing packets on a specified network interface.
+/// It uses the pcap library to capture packets and etherparse to parse them.
+/// It runs in its own thread and checks for pause and stop signals to control the capturing process.
+/// It updates shared packet information using a mutex to ensure thread safety.
 pub struct Sniffer {
     interface: String,
     device: Device,
@@ -14,13 +21,16 @@ pub struct Sniffer {
 
 impl Sniffer {
     pub fn new(interface: String) -> Result<Sniffer, String> {
-        let devices = Device::list().expect("Could not list devices");
         let mut adapter_as_device: Option<Device> = None;
-
-        for device in devices {
-            if device.name == interface {
-                adapter_as_device = Some(device);
-                break;
+        if interface.is_empty() {
+            adapter_as_device = Device::lookup().map_err(|e| e.to_string())?;
+        } else {
+            let devices = Device::list().expect("Could not list devices");
+            for device in devices {
+                if device.name == interface {
+                    adapter_as_device = Some(device);
+                    break;
+                }
             }
         }
         if adapter_as_device.is_none() {
@@ -73,7 +83,7 @@ impl Sniffer {
         }
     }
 
-    pub fn start(self, signaller: Arc<Signaller>) {
+    pub fn start(self, signaller: Arc<Signaller>, packet_info: Arc<PacketInfo>) {
         let device_name = self.device.name;
 
         // use a smaller buffer so output is printed faster to console
@@ -139,7 +149,9 @@ impl Sniffer {
                     let mut transport_protocol = TransportProtocol::Other;
                     let mut timestamp = Local::now();
                     let mut ip_version: IPVersion = IPVersion::IPV4;
+                    let mut packet_size: u16 = 0;
                     let mut skip = false;
+                    let mut traffic_direction = TrafficDirection::INCOMING;
                     let headers = PacketHeaders::from_ethernet_slice(&packet.data).unwrap();
                     match headers.net {
                         None => continue,
@@ -167,18 +179,20 @@ impl Sniffer {
                             }
 
                             match netHeaders {
-                                NetHeaders::Ipv4(ipV4Header, _) => {
+                                NetHeaders::Ipv4(header, _) => {
                                     //ipV4Header.options
-                                    src_ip = ipV4Header.source.map(|oct| oct.to_string()).join(".");
+                                    src_ip = header.source.map(|oct| oct.to_string()).join(".");
                                     dest_ip =
-                                        ipV4Header.destination.map(|oct| oct.to_string()).join(".");
+                                        header.destination.map(|oct| oct.to_string()).join(".");
                                     ip_version = IPVersion::IPV4;
+                                    packet_size = header.total_len
                                 }
                                 NetHeaders::Ipv6(header, _) => {
                                     src_ip = header.source.map(|oct| oct.to_string()).join(".");
                                     dest_ip =
                                         header.destination.map(|oct| oct.to_string()).join(".");
                                     ip_version = IPVersion::IPV6;
+                                    packet_size = header.payload_length
                                 }
                                 _ => skip = true,
                             };
@@ -203,7 +217,40 @@ impl Sniffer {
                                 application_protocol,
                                 timestamp,
                             );
-                            writeln!(writer, "{}\r", sniffed_packet);
+
+                            writeln!(writer, "{}\r", &sniffed_packet);
+                            let packet_link = PacketLink::new(
+                                sniffed_packet.src_ip,
+                                sniffed_packet.dest_ip,
+                                sniffed_packet.src_port,
+                                sniffed_packet.dest_port,
+                                sniffed_packet.transport_protocol,
+                            );
+
+                            let mut info = packet_info.packets.lock().unwrap();
+                            match info.get_mut(&packet_link) {
+                                None => {
+                                    // insert new packet link stats
+                                    let now = Local::now();
+                                    let packet_link_stats = PacketLinkStats::new(
+                                        packet_size as usize,
+                                        1,
+                                        now,
+                                        now,
+                                        traffic_direction,
+                                        sniffed_packet.ip_version,
+                                        application_protocol,
+                                    );
+                                    info.insert(packet_link, packet_link_stats);
+                                    drop(info);
+                                }
+                                Some(link_stats) => {
+                                    link_stats.num_packets += 1;
+                                    link_stats.num_bytes += packet_size as usize;
+                                    link_stats.end_time = Local::now();
+                                    drop(info)
+                                }
+                            }
                         }
                     }
                 }

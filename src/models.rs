@@ -1,4 +1,7 @@
+use chrono::Local;
+use indexmap::IndexMap;
 use std::fmt;
+use std::fmt::Formatter;
 use std::sync::{Condvar, Mutex};
 
 /// Enum representing the possible observed values of transport layer protocol.
@@ -107,5 +110,107 @@ pub struct Signaller {
 impl Signaller {
     pub fn new(mutex: Mutex<SniffStatus>, condvar: Condvar) -> Signaller {
         Signaller { mutex, condvar }
+    }
+}
+
+#[derive(Debug)]
+pub enum TrafficDirection {
+    INCOMING,
+    OUTGOING,
+}
+
+impl fmt::Display for TrafficDirection {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let s = format!("{:?}", self);
+        f.pad(&s)
+    }
+}
+#[derive(Hash, PartialEq, Eq)]
+pub struct PacketLink {
+    pub src_ip: String,
+    pub dest_ip: String,
+    pub src_port: u16,
+    pub dest_port: u16,
+    pub transport_protocol: TransportProtocol,
+}
+
+impl PacketLink {
+    pub fn new(
+        src_ip: String,
+        dest_ip: String,
+        src_port: u16,
+        dest_port: u16,
+        transport_protocol: TransportProtocol,
+    ) -> PacketLink {
+        PacketLink {
+            src_ip,
+            dest_ip,
+            src_port,
+            dest_port,
+            transport_protocol,
+        }
+    }
+}
+
+pub struct PacketLinkStats {
+    pub num_bytes: usize,
+    pub num_packets: usize,
+    pub start_time: chrono::DateTime<Local>,
+    pub end_time: chrono::DateTime<Local>,
+    pub traffic_direction: TrafficDirection,
+    pub ip_version: IPVersion,
+    pub application_protocol: ApplicationProtocol,
+}
+
+impl PacketLinkStats {
+    pub fn new(
+        num_bytes: usize,
+        num_packets: usize,
+        start_time: chrono::DateTime<Local>,
+        end_time: chrono::DateTime<Local>,
+        traffic_direction: TrafficDirection,
+        ip_version: IPVersion,
+        application_protocol: ApplicationProtocol,
+    ) -> PacketLinkStats {
+        PacketLinkStats {
+            num_bytes,
+            num_packets,
+            start_time,
+            end_time,
+            traffic_direction,
+            ip_version,
+            application_protocol,
+        }
+    }
+}
+
+pub struct PacketInfo {
+    pub packets: Mutex<IndexMap<PacketLink, PacketLinkStats>>,
+}
+
+impl PacketInfo {
+    pub fn new() -> Self {
+        PacketInfo {
+            packets: Mutex::new(IndexMap::new()),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReporterStatus {
+    RUNNING,
+    STOPPED,
+}
+pub struct ReporterSignaller {
+    pub mutex: Mutex<ReporterStatus>,
+    pub condvar: Condvar,
+}
+
+impl ReporterSignaller {
+    pub fn new() -> Self {
+        ReporterSignaller {
+            mutex: Mutex::new(ReporterStatus::RUNNING),
+            condvar: Condvar::new(),
+        }
     }
 }

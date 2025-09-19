@@ -9,3 +9,4 @@ pcap = {version = "2.3.0"}
 etherparse = "0.19.0"
 chrono = "0.4.42"
 crossterm = "0.29.0"
+indexmap = "2.11.3"

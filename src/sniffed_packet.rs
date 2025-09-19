@@ -5,12 +5,12 @@ use std::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SniffedPacket {
-    src_ip: String,
-    dest_ip: String,
-    src_port: u16,
-    dest_port: u16,
-    ip_version: IPVersion,
-    transport_protocol: TransportProtocol,
+    pub src_ip: String,
+    pub dest_ip: String,
+    pub src_port: u16,
+    pub dest_port: u16,
+    pub ip_version: IPVersion,
+    pub transport_protocol: TransportProtocol,
     application_protocol: ApplicationProtocol,
     timestamp: chrono::DateTime<Local>,
 }
