@@ -3,11 +3,14 @@ use crate::models::{
     SniffStatus, TrafficDirection, TransportProtocol,
 };
 use crate::sniffed_packet::SniffedPacket;
+use crate::utils::format_number_to_bytes;
 use chrono::Local;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
 use pcap::{Capture, Device};
+use std::collections::HashMap;
 use std::io::Write;
 use std::io::{BufWriter, stdout};
+use std::net::IpAddr;
 use std::sync::Arc;
 
 /// Sniffer is responsible for capturing packets on a specified network interface.
@@ -84,26 +87,52 @@ impl Sniffer {
     }
 
     pub fn start(self, signaller: Arc<Signaller>, packet_info: Arc<PacketInfo>) {
-        let device_name = self.device.name;
+        let device_name = self.device.name.as_str();
 
         // use a smaller buffer so output is printed faster to console
         let mut writer = BufWriter::with_capacity(1024, stdout());
         let mut captured_packets: usize = 0;
         let mut skipped_packets: usize = 0;
+        let mut transferred_bytes: u64 = 0;
+        let mut received_bytes: u64 = 0;
+        let mut packets_sent: usize = 0;
+        let mut packets_received: usize = 0;
 
-        let legend = "Legend:\r\n\t\
-        - S Port : Source Port\r\n\t\
-        - D Port : Destination Port\r\n\t\
-        - IP     : IP Version (4 or 6)\r\n\t\
-        - T P    : Transmission Protocol\r\n\t\
-        - A P    : Application Protocol\r\n\n";
+        let addresses = self
+            .device
+            .addresses
+            .iter()
+            .map(|e| e.addr)
+            .collect::<Vec<IpAddr>>();
 
-        let hyphen = format!("{}{}{}\r", "+", "-".repeat(192), "+");
+        let mut address_map: HashMap<String, String> = HashMap::new();
+        for address in addresses {
+            match address {
+                IpAddr::V4(address) => {
+                    let address = address.to_string();
+                    address_map.insert(address.clone(), address);
+                }
+                IpAddr::V6(x) => {
+                    let decimal_dotted_ipv6 = prettify_ip::ipv6_to_decimal_dotted(&x);
+                    address_map.insert(decimal_dotted_ipv6, address.to_string());
+                }
+            }
+        }
+
+        let hyphen = format!("{}{}{}\r", "+", "-".repeat(185), "+");
         let header = format!(
-            "| {0:^62} | {1:^62} | {2:^6} | {3:^6} | {4:^5} | {5:^3} | {6:^6} | {7:^19} |\r\n",
-            "Source IP", "Destination IP", "S Port", "D Port", "IP", "T P", "A P", "timestamp",
+            "| {0:^45} | {1:^45} | {2:^9} | {3:^9} | {4:^6} | {5:^11} | {6:^8} | {7:^7} | {8:^19} |\r\n",
+            "Source IP",
+            "Destination IP",
+            "Src Port",
+            "Dest Port",
+            "IP",
+            "Direction",
+            "Layer 4",
+            "Layer 7",
+            "timestamp",
         );
-        writeln!(writer, "{}{}\n{}{}\r", legend, hyphen, header, hyphen);
+        writeln!(writer, "{}\n{}{}\r", hyphen, header, hyphen);
 
         loop {
             let mut signal = signaller.mutex.lock().unwrap();
@@ -111,11 +140,11 @@ impl Sniffer {
             match *signal {
                 SniffStatus::RUNNING => {
                     drop(signal);
-                    cap = Capture::from_device(device_name.as_str())
+                    cap = Capture::from_device(device_name)
                         .unwrap()
                         .promisc(true)
+                        .snaplen(4000) // we only need the header, we don't need the body
                         .immediate_mode(true)
-                        .snaplen(4500)
                         .open()
                         .unwrap();
                 }
@@ -130,8 +159,13 @@ impl Sniffer {
                 SniffStatus::STOPPED => {
                     writeln!(
                         writer,
-                        "Captured Packets: {}\r\nSkipped Packets: {}\r",
-                        captured_packets, skipped_packets
+                        "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r",
+                        captured_packets,
+                        skipped_packets,
+                        format_number_to_bytes(transferred_bytes),
+                        format_number_to_bytes(received_bytes),
+                        packets_sent,
+                        packets_received
                     );
                     drop(signal);
                     break;
@@ -149,9 +183,9 @@ impl Sniffer {
                     let mut transport_protocol = TransportProtocol::Other;
                     let mut timestamp = Local::now();
                     let mut ip_version: IPVersion = IPVersion::IPV4;
-                    let mut packet_size: u16 = 0;
+                    let mut packet_size: usize = packet.header.len as usize;
                     let mut skip = false;
-                    let mut traffic_direction = TrafficDirection::INCOMING;
+                    let mut traffic_direction = TrafficDirection::OTHER;
                     let headers = PacketHeaders::from_ethernet_slice(&packet.data).unwrap();
                     match headers.net {
                         None => continue,
@@ -169,6 +203,7 @@ impl Sniffer {
                                         dest_port = h.destination_port;
                                         transport_protocol = TransportProtocol::TCP
                                     }
+                                    // skip icmp headers
                                     _ => skip = true,
                                 },
                             };
@@ -184,16 +219,55 @@ impl Sniffer {
                                     src_ip = header.source.map(|oct| oct.to_string()).join(".");
                                     dest_ip =
                                         header.destination.map(|oct| oct.to_string()).join(".");
+                                    if address_map.contains_key(&src_ip) {
+                                        traffic_direction = TrafficDirection::OUTGOING;
+                                    } else if address_map.contains_key(&dest_ip) {
+                                        traffic_direction = TrafficDirection::INCOMING;
+                                    } else if Self::is_multicast_address(&dest_ip) {
+                                        traffic_direction = TrafficDirection::MULTICAST
+                                    }
                                     ip_version = IPVersion::IPV4;
-                                    packet_size = header.total_len
                                 }
                                 NetHeaders::Ipv6(header, _) => {
                                     src_ip = header.source.map(|oct| oct.to_string()).join(".");
                                     dest_ip =
                                         header.destination.map(|oct| oct.to_string()).join(".");
+
+                                    if address_map.contains_key(&src_ip) {
+                                        traffic_direction = TrafficDirection::OUTGOING;
+                                        src_ip = address_map.get(&src_ip).unwrap().clone();
+                                        dest_ip = prettify_ip::parse_ipv6_decimal_dotted(
+                                            dest_ip.as_str(),
+                                        )
+                                        .unwrap()
+                                        .to_string();
+                                    } else if address_map.contains_key(&dest_ip) {
+                                        traffic_direction = TrafficDirection::INCOMING;
+                                        dest_ip = address_map.get(&dest_ip).unwrap().clone();
+                                        src_ip =
+                                            prettify_ip::parse_ipv6_decimal_dotted(src_ip.as_str())
+                                                .unwrap()
+                                                .to_string();
+                                    }
+
+                                    if let TrafficDirection::OTHER = traffic_direction {
+                                        dest_ip = prettify_ip::parse_ipv6_decimal_dotted(
+                                            dest_ip.as_str(),
+                                        )
+                                        .unwrap()
+                                        .to_string();
+                                        src_ip =
+                                            prettify_ip::parse_ipv6_decimal_dotted(src_ip.as_str())
+                                                .unwrap()
+                                                .to_string();
+                                        if Self::is_multicast_address(&dest_ip) {
+                                            traffic_direction = TrafficDirection::MULTICAST;
+                                        }
+                                    }
+
                                     ip_version = IPVersion::IPV6;
-                                    packet_size = header.payload_length
                                 }
+                                // ignore ARP Packets
                                 _ => skip = true,
                             };
 
@@ -207,6 +281,17 @@ impl Sniffer {
                                     src_port, dest_port,
                                 );
                             captured_packets += 1;
+
+                            match traffic_direction {
+                                TrafficDirection::INCOMING | TrafficDirection::MULTICAST => {
+                                    received_bytes += packet_size as u64;
+                                    packets_received += 1;
+                                }
+                                _ => {
+                                    transferred_bytes += packet_size as u64;
+                                    packets_sent += 1
+                                }
+                            }
                             let sniffed_packet = SniffedPacket::new(
                                 src_ip,
                                 dest_ip,
@@ -215,6 +300,7 @@ impl Sniffer {
                                 ip_version,
                                 transport_protocol,
                                 application_protocol,
+                                traffic_direction,
                                 timestamp,
                             );
 
@@ -233,11 +319,11 @@ impl Sniffer {
                                     // insert new packet link stats
                                     let now = Local::now();
                                     let packet_link_stats = PacketLinkStats::new(
-                                        packet_size as usize,
+                                        packet_size,
                                         1,
                                         now,
                                         now,
-                                        traffic_direction,
+                                        sniffed_packet.traffic_direction,
                                         sniffed_packet.ip_version,
                                         application_protocol,
                                     );
@@ -246,7 +332,7 @@ impl Sniffer {
                                 }
                                 Some(link_stats) => {
                                     link_stats.num_packets += 1;
-                                    link_stats.num_bytes += packet_size as usize;
+                                    link_stats.num_bytes += packet_size;
                                     link_stats.end_time = Local::now();
                                     drop(info)
                                 }
@@ -258,6 +344,16 @@ impl Sniffer {
                     writeln!(writer, "Could not parse packet: {:?}\r", e);
                 }
             }
+        }
+    }
+
+    fn is_multicast_address(ip: &str) -> bool {
+        if ip.contains(":") {
+            // ipv6
+            ip.starts_with("ff")
+        } else {
+            let first_token = ip.split(".").next().unwrap().parse::<u8>().unwrap();
+            first_token >= 224 && first_token <= 239
         }
     }
 }

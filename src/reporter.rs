@@ -43,7 +43,6 @@ impl Reporter {
     }
 
     pub fn start(&self, mut packet_info: Arc<PacketInfo>, signaller: Arc<ReporterSignaller>) {
-
         let mut buf_writer = BufWriter::new(&self.file);
         let mut header_written = false;
         loop {
@@ -97,7 +96,7 @@ impl Reporter {
         if !*header_written {
             writer.write_all(
                 format!(
-                    "{},{},{},{},{},{},{},{},{},{},{}\n",
+                    "{},{},{},{},{},{},{},{},{},{},{}",
                     "src_ip",
                     "dest_ip",
                     "src_port",
@@ -117,7 +116,7 @@ impl Reporter {
         for (link, stats) in stats {
             writer.write_all(
                 format!(
-                    "{},{},{},{},{},{},{},{},{},{},{}\n",
+                    "\n{},{},{},{},{},{},{},{},{},{},{}",
                     link.src_ip,
                     link.dest_ip,
                     link.src_port,

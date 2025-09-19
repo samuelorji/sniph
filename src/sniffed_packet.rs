@@ -1,4 +1,4 @@
-use crate::models::{ApplicationProtocol, IPVersion, TransportProtocol};
+use crate::models::{ApplicationProtocol, IPVersion, TrafficDirection, TransportProtocol};
 use chrono::Local;
 use std::fmt::{Display, Formatter, format};
 use std::time::Instant;
@@ -12,6 +12,7 @@ pub struct SniffedPacket {
     pub ip_version: IPVersion,
     pub transport_protocol: TransportProtocol,
     application_protocol: ApplicationProtocol,
+    pub traffic_direction: TrafficDirection,
     timestamp: chrono::DateTime<Local>,
 }
 
@@ -24,6 +25,7 @@ impl SniffedPacket {
         ip_version: IPVersion,
         transport_protocol: TransportProtocol,
         application_protocol: ApplicationProtocol,
+        traffic_direction: TrafficDirection,
         timestamp: chrono::DateTime<Local>,
     ) -> SniffedPacket {
         SniffedPacket {
@@ -34,6 +36,7 @@ impl SniffedPacket {
             ip_version,
             transport_protocol,
             application_protocol,
+            traffic_direction,
             timestamp,
         }
     }
@@ -41,14 +44,15 @@ impl SniffedPacket {
 
 impl Display for SniffedPacket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let hyphen = format!("{}{}{}", "+", "-".repeat(192), "+");
+        let hyphen = format!("{}{}{}", "+", "-".repeat(185), "+");
         let msg = format!(
-            "| {0:^62} | {1:^62} | {2:^6} | {3:^6} | {4:^5} | {5:^8} | {6:^6} | {7:^18} |\r\n{8}",
+            "| {0:^45} | {1:^45} | {2:^9} | {3:^9} | {4:^6} | {5:^11} | {6:^8} | {7:^7} | {8:^19} |\r\n{9}",
             self.src_ip,
             self.dest_ip,
             self.src_port,
             self.dest_port,
             self.ip_version,
+            self.traffic_direction,
             self.transport_protocol,
             self.application_protocol,
             self.timestamp.format("%Y-%m-%d %H:%M:%S"),

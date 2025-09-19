@@ -2,6 +2,7 @@ mod models;
 mod reporter;
 mod sniffed_packet;
 mod sniffer;
+mod utils;
 
 use crate::models::{PacketInfo, ReporterSignaller, ReporterStatus, Signaller, SniffStatus};
 use crate::reporter::Reporter;
@@ -83,7 +84,7 @@ fn main() {
 
     read_user_input(input_signal);
     sniffer_handle.join();
-    
+
     // stop reporter and make it run finalizers.
     // It's important this runs after the packet sniffer thread completes, so we don't miss out on packets.
     run_reporter_finalizers(report_join_handle, user_input_reporter_signaller);

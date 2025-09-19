@@ -17,7 +17,8 @@ pub enum TransportProtocol {
 
 impl fmt::Display for TransportProtocol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        let s = format!("{:?}", self);
+        f.pad(&s)
     }
 }
 
@@ -113,10 +114,12 @@ impl Signaller {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TrafficDirection {
     INCOMING,
     OUTGOING,
+    MULTICAST,
+    OTHER,
 }
 
 impl fmt::Display for TrafficDirection {
