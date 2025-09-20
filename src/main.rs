@@ -1,10 +1,12 @@
 mod models;
+mod packet_filtering;
 mod reporter;
 mod sniffed_packet;
 mod sniffer;
 mod utils;
 
 use crate::models::{PacketInfo, ReporterSignaller, ReporterStatus, Signaller, SniffStatus};
+use crate::packet_filtering::PacketFilter;
 use crate::reporter::Reporter;
 use crate::sniffer::Sniffer;
 use clap::Parser;
@@ -34,6 +36,22 @@ struct Args {
     /// output folder where report will be written to
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    /// Filters to apply to captured packets
+    /// E.g src_port > 8000 or dst_port < 4000
+    /// Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
+    /// Each filter should be in the format <field> <operator> <value>
+    /// Supported fields: src_ip, dst_ip, src_port, dst_port, transport
+    /// Supported operators: >, <, >=, <=, ==, !=
+    /// Example: --filter "src_ip == 192.168.1.1"
+    /// Example: --filter "src_port >= 8000, dst_port < 4000"
+    /// Note: A space must exist between the field, operator and value
+    /// Note: No spaces between commas and next filter
+    /// If no filter is provided, all packets are captured
+    /// == and != operators are string comparisons and only valid for IP addresses and protocol
+    /// >, <, >=, <= operators are numeric comparisons and only valid for ports
+    #[arg(short, long)]
+    filter: Option<String>,
 }
 
 fn main() {
@@ -43,20 +61,32 @@ fn main() {
         std::process::exit(0);
     }
 
-    let packetInfo = Arc::new(PacketInfo::new());
+    let packet_info = Arc::new(PacketInfo::new());
 
-    let reporter_packet_info = Arc::clone(&packetInfo);
-
-    let sniffer_packet_info = Arc::clone(&packetInfo);
+    let sniffer_packet_info = Arc::clone(&packet_info);
 
     let reporter_signaller = Arc::new(ReporterSignaller::new());
     let user_input_reporter_signaller = Arc::clone(&reporter_signaller);
 
+    let packet_filter = match args.filter {
+        None => None,
+        Some(filter_string) => Some(PacketFilter::new(&filter_string).unwrap_or_else(|e| {
+            eprintln!("{}", format!("Failed to Parse Packet filter: {}", e));
+            std::process::exit(1);
+        })),
+    };
+
+    println!("packet_filter: {:?}", &packet_filter);
+
     let report_join_handle = match args.output {
         None => None,
         Some(output_folder) => {
-            let reporter = Reporter::new(output_folder).expect("Can't create reporter");
-            let handle = std::thread::spawn(move || reporter.start(packetInfo, reporter_signaller));
+            let reporter = Reporter::new(output_folder).unwrap_or_else(|e| {
+                eprintln!("{}", format!("Failed to Create Reporter: {}", e));
+                std::process::exit(1)
+            });
+            let handle =
+                std::thread::spawn(move || reporter.start(packet_info, reporter_signaller));
             Some(handle)
         }
     };
@@ -72,9 +102,9 @@ fn main() {
 
     enable_raw_mode().unwrap();
     let sniffer_handle = match Sniffer::new(args.interface) {
-        Ok(sniffer) => {
-            std::thread::spawn(move || sniffer.start(packet_parser_signal, sniffer_packet_info))
-        }
+        Ok(sniffer) => std::thread::spawn(move || {
+            sniffer.start(packet_parser_signal, sniffer_packet_info, packet_filter)
+        }),
         Err(e) => {
             eprintln!("Sniffer Error:\r\n{}", e);
             disable_raw_mode().unwrap();
@@ -150,7 +180,10 @@ fn print_devices() {
     const DEVICE_COLUMN_WIDTH: usize = 20;
     const ADDRESS_COLUMN_WIDTH: usize = 50;
 
-    let devices = pcap::Device::list().expect("Could not list devices");
+    let devices = pcap::Device::list().unwrap_or_else(|e| {
+        eprintln!("Could not list devices: {}", e);
+        std::process::exit(1);
+    });
 
     let mut writer = BufWriter::new(std::io::stdout());
     let hyphen_line = format!("{}{}{}", "+", "-".repeat(74_usize), "+");
