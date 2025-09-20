@@ -2,6 +2,7 @@ use crate::models::{
     ApplicationProtocol, IPVersion, PacketInfo, PacketLink, PacketLinkStats, Signaller,
     SniffStatus, TrafficDirection, TransportProtocol,
 };
+use crate::packet_filtering::PacketFilter;
 use crate::sniffed_packet::SniffedPacket;
 use crate::utils::format_number_to_bytes;
 use chrono::Local;
@@ -86,13 +87,19 @@ impl Sniffer {
         }
     }
 
-    pub fn start(self, signaller: Arc<Signaller>, packet_info: Arc<PacketInfo>) {
+    pub fn start(
+        self,
+        signaller: Arc<Signaller>,
+        packet_info: Arc<PacketInfo>,
+        packet_filter: Option<PacketFilter>,
+    ) {
         let device_name = self.device.name.as_str();
 
         // use a smaller buffer so output is printed faster to console
         let mut writer = BufWriter::with_capacity(1024, stdout());
         let mut captured_packets: usize = 0;
         let mut skipped_packets: usize = 0;
+        let mut ignored_packets: usize = 0;
         let mut transferred_bytes: u64 = 0;
         let mut received_bytes: u64 = 0;
         let mut packets_sent: usize = 0;
@@ -157,15 +164,19 @@ impl Sniffer {
                     continue;
                 }
                 SniffStatus::STOPPED => {
+                    if captured_packets != 0 {
+                        writer.flush();
+                    }
                     writeln!(
                         writer,
-                        "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r",
+                        "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nSkipped Packets: {}\r",
                         captured_packets,
                         skipped_packets,
                         format_number_to_bytes(transferred_bytes),
                         format_number_to_bytes(received_bytes),
                         packets_sent,
-                        packets_received
+                        packets_received,
+                        ignored_packets
                     );
                     drop(signal);
                     break;
@@ -207,6 +218,15 @@ impl Sniffer {
                                     _ => skip = true,
                                 },
                             };
+                            // check if  we need to filter out this packet based on port or protocol
+                            if let Some(filter) = &packet_filter {
+                                if !filter.should_capture_with_ports(src_port, dest_port)
+                                    || !filter.should_capture_with_transport(transport_protocol)
+                                {
+                                    ignored_packets += 1;
+                                    continue;
+                                }
+                            }
 
                             if skip {
                                 skipped_packets += 1;
@@ -270,6 +290,14 @@ impl Sniffer {
                                 // ignore ARP Packets
                                 _ => skip = true,
                             };
+
+                            // check if  we need to filter out this packet based on ip
+                            if let Some(filter) = &packet_filter {
+                                if !filter.should_capture_with_ips(&src_ip, &dest_ip) {
+                                    ignored_packets += 1;
+                                    continue;
+                                }
+                            }
 
                             if skip {
                                 skipped_packets += 1;
