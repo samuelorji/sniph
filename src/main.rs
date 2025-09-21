@@ -29,8 +29,8 @@ struct Args {
     #[arg(short, long)]
     devices: bool,
 
-    /// interface to sniff, if not supplied, will default to default interface on machine
-    #[arg(short, long, default_value_t = String::new())]
+    /// interface to sniff
+    #[arg(short, long)]
     interface: String,
 
     /// output folder where report will be written to
@@ -38,8 +38,7 @@ struct Args {
     output: Option<PathBuf>,
 
     /// Filters to apply to captured packets
-    /// E.g src_port > 8000 or dst_port < 4000
-    /// Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
+    /// E.g src_port > 8000 or dst_port < 4000 . Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
     /// Each filter should be in the format <field> <operator> <value>
     /// Supported fields: src_ip, dst_ip, src_port, dst_port, transport
     /// Supported operators: >, <, >=, <=, ==, !=
@@ -50,7 +49,7 @@ struct Args {
     /// If no filter is provided, all packets are captured
     /// == and != operators are string comparisons and only valid for IP addresses and protocol
     /// >, <, >=, <= operators are numeric comparisons and only valid for ports
-    #[arg(short, long)]
+    #[arg(short, long, verbatim_doc_comment)]
     filter: Option<String>,
 }
 
@@ -75,8 +74,6 @@ fn main() {
             std::process::exit(1);
         })),
     };
-
-    println!("packet_filter: {:?}", &packet_filter);
 
     let report_join_handle = match args.output {
         None => None,
@@ -106,7 +103,7 @@ fn main() {
             sniffer.start(packet_parser_signal, sniffer_packet_info, packet_filter)
         }),
         Err(e) => {
-            eprintln!("Sniffer Error:\r\n{}", e);
+            eprintln!("Sniffer Error: {}\r\n", e);
             disable_raw_mode().unwrap();
             std::process::exit(1);
         }

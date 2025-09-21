@@ -26,15 +26,11 @@ pub struct Sniffer {
 impl Sniffer {
     pub fn new(interface: String) -> Result<Sniffer, String> {
         let mut adapter_as_device: Option<Device> = None;
-        if interface.is_empty() {
-            adapter_as_device = Device::lookup().map_err(|e| e.to_string())?;
-        } else {
-            let devices = Device::list().expect("Could not list devices");
-            for device in devices {
-                if device.name == interface {
-                    adapter_as_device = Some(device);
-                    break;
-                }
+        let devices = Device::list().expect("Could not list devices");
+        for device in devices {
+            if device.name == interface {
+                adapter_as_device = Some(device);
+                break;
             }
         }
         if adapter_as_device.is_none() {
@@ -94,6 +90,7 @@ impl Sniffer {
         packet_filter: Option<PacketFilter>,
     ) {
         let device_name = self.device.name.as_str();
+        println!("Starting sniffer for interface '{}'\r", &device_name);
 
         // use a smaller buffer so output is printed faster to console
         let mut writer = BufWriter::with_capacity(1024, stdout());
@@ -139,21 +136,39 @@ impl Sniffer {
             "Layer 7",
             "timestamp",
         );
+
         writeln!(writer, "{}\n{}{}\r", hyphen, header, hyphen);
+
+        let mut cap;
+        cap = Capture::from_device(device_name)
+            .unwrap()
+            .promisc(true)
+            .timeout(1000)
+            .snaplen(4000) // we only need the header, we don't need the body
+            .immediate_mode(true)
+            .open()
+            .unwrap();
+
+        let mut was_paused = false;
 
         loop {
             let mut signal = signaller.mutex.lock().unwrap();
-            let mut cap;
             match *signal {
                 SniffStatus::RUNNING => {
                     drop(signal);
-                    cap = Capture::from_device(device_name)
-                        .unwrap()
-                        .promisc(true)
-                        .snaplen(4000) // we only need the header, we don't need the body
-                        .immediate_mode(true)
-                        .open()
-                        .unwrap();
+                    if was_paused {
+                        // re-initialize capture to ignore packets that happened during pause
+                        cap = Capture::from_device(device_name)
+                            .unwrap()
+                            .promisc(true)
+                            .timeout(1000)
+                            .snaplen(4000) // we only need the header, we don't need the body
+                            .immediate_mode(true)
+                            .open()
+                            .unwrap();
+                        was_paused = false
+                    }
+
                 }
                 SniffStatus::PAUSED => {
                     writer.flush().unwrap();
@@ -161,6 +176,8 @@ impl Sniffer {
                         signal = signaller.condvar.wait(signal).unwrap();
                     }
                     drop(signal);
+                    was_paused = true;
+                    // once we move from paused state, continue the loop
                     continue;
                 }
                 SniffStatus::STOPPED => {
@@ -182,6 +199,7 @@ impl Sniffer {
                     break;
                 }
             }
+
 
             match cap.next_packet() {
                 Ok(packet) => {
@@ -369,7 +387,9 @@ impl Sniffer {
                     }
                 }
                 Err(e) => {
-                    writeln!(writer, "Could not parse packet: {:?}\r", e);
+                    // ignore error cases, the most prominent being timeouts.
+                    // we set the capture to timeout in 1 second if no packets are available rather than blocking the thread
+                    // If the thread is blocked, it won't be able to respond to any signal, most importantly Ctrl + C to quit the program
                 }
             }
         }

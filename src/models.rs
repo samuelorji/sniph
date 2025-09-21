@@ -2,7 +2,7 @@ use chrono::Local;
 use indexmap::IndexMap;
 use std::fmt;
 use std::fmt::Formatter;
-use std::sync::{Condvar, Mutex};
+use std::sync::{Condvar, Mutex, Arc};
 
 /// Enum representing the possible observed values of transport layer protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
