@@ -1,11 +1,12 @@
 use crate::models::{
-    ApplicationProtocol, IPVersion, PacketInfo, PacketLink, PacketLinkStats, Signaller,
-    SniffStatus, TrafficDirection, TransportProtocol,
+    ApplicationProtocol, IP, IPOctet, IPVersion, PacketInfo, PacketLink, PacketLinkStats,
+    Signaller, SniffStatus, TrafficDirection, TransportProtocol,
 };
 use crate::packet_filtering::PacketFilter;
 use crate::sniffed_packet::SniffedPacket;
 use crate::utils::format_number_to_bytes;
 use chrono::Local;
+use clap::builder::Str;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
 use pcap::{Capture, Device};
 use std::collections::HashMap;
@@ -94,13 +95,13 @@ impl Sniffer {
 
         // use a smaller buffer so output is printed faster to console
         let mut writer = BufWriter::with_capacity(1024, stdout());
-        let mut captured_packets: usize = 0;
-        let mut skipped_packets: usize = 0;
-        let mut ignored_packets: usize = 0;
-        let mut transferred_bytes: u64 = 0;
-        let mut received_bytes: u64 = 0;
-        let mut packets_sent: usize = 0;
-        let mut packets_received: usize = 0;
+        let mut captured_packets: u128 = 0;
+        let mut skipped_packets: u128 = 0;
+        let mut ignored_packets: u128 = 0;
+        let mut transferred_bytes: u128 = 0;
+        let mut received_bytes: u128 = 0;
+        let mut packets_sent: u128 = 0;
+        let mut packets_received: u128 = 0;
 
         let addresses = self
             .device
@@ -109,16 +110,15 @@ impl Sniffer {
             .map(|e| e.addr)
             .collect::<Vec<IpAddr>>();
 
-        let mut address_map: HashMap<String, String> = HashMap::new();
+        let mut address_map: HashMap<IPOctet, Arc<str>> = HashMap::new();
         for address in addresses {
+            let arc: Arc<str> = Arc::from(address.to_string().as_str());
             match address {
                 IpAddr::V4(address) => {
-                    let address = address.to_string();
-                    address_map.insert(address.clone(), address);
+                    address_map.insert(IPOctet::V4(address.octets()), arc);
                 }
-                IpAddr::V6(x) => {
-                    let decimal_dotted_ipv6 = prettify_ip::ipv6_to_decimal_dotted(&x);
-                    address_map.insert(decimal_dotted_ipv6, address.to_string());
+                IpAddr::V6(address) => {
+                    address_map.insert(IPOctet::V6(address.octets()), arc);
                 }
             }
         }
@@ -168,7 +168,6 @@ impl Sniffer {
                             .unwrap();
                         was_paused = false
                     }
-
                 }
                 SniffStatus::PAUSED => {
                     writer.flush().unwrap();
@@ -186,7 +185,7 @@ impl Sniffer {
                     }
                     writeln!(
                         writer,
-                        "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nSkipped Packets: {}\r",
+                        "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
                         captured_packets,
                         skipped_packets,
                         format_number_to_bytes(transferred_bytes),
@@ -200,12 +199,11 @@ impl Sniffer {
                 }
             }
 
-
             match cap.next_packet() {
                 Ok(packet) => {
                     let ts = packet.header.ts;
-                    let mut src_ip: String = String::new();
-                    let mut dest_ip: String = String::new();
+                    let mut src_ip: IP = IP::UNCACHED(String::new());
+                    let mut dest_ip: IP = IP::UNCACHED(String::new());
                     let mut src_port: u16 = 0;
                     let mut dest_port: u16 = 0;
                     let mut application_protocol = ApplicationProtocol::Other;
@@ -253,56 +251,98 @@ impl Sniffer {
 
                             match netHeaders {
                                 NetHeaders::Ipv4(header, _) => {
-                                    //ipV4Header.options
-                                    src_ip = header.source.map(|oct| oct.to_string()).join(".");
-                                    dest_ip =
-                                        header.destination.map(|oct| oct.to_string()).join(".");
-                                    if address_map.contains_key(&src_ip) {
-                                        traffic_direction = TrafficDirection::OUTGOING;
-                                    } else if address_map.contains_key(&dest_ip) {
-                                        traffic_direction = TrafficDirection::INCOMING;
-                                    } else if Self::is_multicast_address(&dest_ip) {
-                                        traffic_direction = TrafficDirection::MULTICAST
-                                    }
-                                    ip_version = IPVersion::IPV4;
-                                }
-                                NetHeaders::Ipv6(header, _) => {
-                                    src_ip = header.source.map(|oct| oct.to_string()).join(".");
-                                    dest_ip =
-                                        header.destination.map(|oct| oct.to_string()).join(".");
+                                    let source_octets = IPOctet::V4(header.source);
+                                    let dest_octets = IPOctet::V4(header.destination);
 
-                                    if address_map.contains_key(&src_ip) {
+                                    if let Some(ip) = address_map.get(&source_octets) {
                                         traffic_direction = TrafficDirection::OUTGOING;
-                                        src_ip = address_map.get(&src_ip).unwrap().clone();
-                                        dest_ip = prettify_ip::parse_ipv6_decimal_dotted(
-                                            dest_ip.as_str(),
-                                        )
-                                        .unwrap()
-                                        .to_string();
-                                    } else if address_map.contains_key(&dest_ip) {
+                                        src_ip = IP::CACHED(ip.clone());
+                                        if let IPOctet::V4(octet) = dest_octets {
+                                            dest_ip = IP::UNCACHED(
+                                                octet.map(|oct| oct.to_string()).join("."),
+                                            );
+                                        }
+                                    } else if let Some(ip) = address_map.get(&dest_octets) {
                                         traffic_direction = TrafficDirection::INCOMING;
-                                        dest_ip = address_map.get(&dest_ip).unwrap().clone();
-                                        src_ip =
-                                            prettify_ip::parse_ipv6_decimal_dotted(src_ip.as_str())
-                                                .unwrap()
-                                                .to_string();
-                                    }
+                                        dest_ip = IP::CACHED(ip.clone());
+                                        if let IPOctet::V4(octet) = source_octets {
+                                            src_ip = IP::UNCACHED(
+                                                octet.map(|oct| oct.to_string()).join("."),
+                                            );
+                                        }
+                                    } else {
+                                        if let IPOctet::V4(octet) = source_octets {
+                                            src_ip = IP::UNCACHED(
+                                                octet.map(|oct| oct.to_string()).join("."),
+                                            );
+                                        }
+                                        if let IPOctet::V4(octet) = dest_octets {
+                                            dest_ip = IP::UNCACHED(
+                                                octet.map(|oct| oct.to_string()).join("."),
+                                            );
+                                        }
 
-                                    if let TrafficDirection::OTHER = traffic_direction {
-                                        dest_ip = prettify_ip::parse_ipv6_decimal_dotted(
-                                            dest_ip.as_str(),
-                                        )
-                                        .unwrap()
-                                        .to_string();
-                                        src_ip =
-                                            prettify_ip::parse_ipv6_decimal_dotted(src_ip.as_str())
-                                                .unwrap()
-                                                .to_string();
+                                        // this must come after the src_ip and dest_ip have been set above
                                         if Self::is_multicast_address(&dest_ip) {
                                             traffic_direction = TrafficDirection::MULTICAST;
                                         }
                                     }
+                                    ip_version = IPVersion::IPV4;
+                                }
+                                NetHeaders::Ipv6(header, _) => {
+                                    let source_octets = IPOctet::V6(header.source);
+                                    let dest_octets = IPOctet::V6(header.destination);
 
+                                    if let Some(ip) = address_map.get(&source_octets) {
+                                        traffic_direction = TrafficDirection::OUTGOING;
+                                        src_ip = IP::CACHED(ip.clone());
+                                        if let IPOctet::V6(octet) = dest_octets {
+                                            dest_ip = IP::UNCACHED(
+                                                prettify_ip::parse_ipv6_decimal_dotted(
+                                                    &octet.map(|oct| oct.to_string()).join("."),
+                                                )
+                                                .unwrap()
+                                                .to_string(),
+                                            );
+                                        }
+                                    } else if let Some(ip) = address_map.get(&dest_octets) {
+                                        traffic_direction = TrafficDirection::INCOMING;
+                                        dest_ip = IP::CACHED(ip.clone());
+                                        if let IPOctet::V6(octet) = source_octets {
+                                            src_ip = IP::UNCACHED(
+                                                prettify_ip::parse_ipv6_decimal_dotted(
+                                                    &octet.map(|oct| oct.to_string()).join("."),
+                                                )
+                                                .unwrap()
+                                                .to_string(),
+                                            );
+                                        }
+                                    } else {
+                                        if let IPOctet::V6(octet) = dest_octets {
+                                            dest_ip = IP::UNCACHED(
+                                                prettify_ip::parse_ipv6_decimal_dotted(
+                                                    &octet.map(|oct| oct.to_string()).join("."),
+                                                )
+                                                .unwrap()
+                                                .to_string(),
+                                            );
+                                        }
+
+                                        if let IPOctet::V6(octet) = source_octets {
+                                            src_ip = IP::UNCACHED(
+                                                prettify_ip::parse_ipv6_decimal_dotted(
+                                                    &octet.map(|oct| oct.to_string()).join("."),
+                                                )
+                                                .unwrap()
+                                                .to_string(),
+                                            );
+                                        }
+
+                                        // this must come after the src_ip and dest_ip have been set above
+                                        if Self::is_multicast_address(&dest_ip) {
+                                            traffic_direction = TrafficDirection::MULTICAST;
+                                        }
+                                    }
                                     ip_version = IPVersion::IPV6;
                                 }
                                 // ignore ARP Packets
@@ -330,11 +370,11 @@ impl Sniffer {
 
                             match traffic_direction {
                                 TrafficDirection::INCOMING | TrafficDirection::MULTICAST => {
-                                    received_bytes += packet_size as u64;
+                                    received_bytes += packet_size as u128;
                                     packets_received += 1;
                                 }
                                 _ => {
-                                    transferred_bytes += packet_size as u64;
+                                    transferred_bytes += packet_size as u128;
                                     packets_sent += 1
                                 }
                             }
@@ -365,7 +405,7 @@ impl Sniffer {
                                     // insert new packet link stats
                                     let now = Local::now();
                                     let packet_link_stats = PacketLinkStats::new(
-                                        packet_size,
+                                        packet_size as u128,
                                         1,
                                         now,
                                         now,
@@ -378,7 +418,7 @@ impl Sniffer {
                                 }
                                 Some(link_stats) => {
                                     link_stats.num_packets += 1;
-                                    link_stats.num_bytes += packet_size;
+                                    link_stats.num_bytes += packet_size as u128;
                                     link_stats.end_time = Local::now();
                                     drop(info)
                                 }
