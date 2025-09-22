@@ -189,14 +189,38 @@ impl PacketLinkStats {
     }
 }
 
+pub struct PacketStatistics {
+    pub captured_packets: u128,
+    pub skipped_packets: u128,
+    pub filtered_packets: u128,
+    pub transferred_bytes: u128,
+    pub received_bytes: u128,
+    pub packets_sent: u128,
+    pub packets_received: u128,
+}
+impl PacketStatistics {
+    pub fn new() -> PacketStatistics {
+        PacketStatistics {
+            captured_packets: 0,
+            skipped_packets: 0,
+            filtered_packets: 0,
+            transferred_bytes: 0,
+            received_bytes: 0,
+            packets_sent: 0,
+            packets_received: 0,
+        }
+    }
+}
 pub struct PacketInfo {
-    pub packets: Mutex<IndexMap<PacketLink, PacketLinkStats>>,
+    pub stats: PacketStatistics,
+    pub packet_mapping: IndexMap<PacketLink, PacketLinkStats>,
 }
 
 impl PacketInfo {
     pub fn new() -> Self {
         PacketInfo {
-            packets: Mutex::new(IndexMap::new()),
+            stats: PacketStatistics::new(),
+            packet_mapping: IndexMap::new(),
         }
     }
 }

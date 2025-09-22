@@ -1,4 +1,5 @@
 use crate::models::{PacketInfo, PacketLink, PacketLinkStats, ReporterSignaller, ReporterStatus};
+use crate::utils::format_number_to_bytes;
 use chrono::{Local, TimeDelta};
 use indexmap::IndexMap;
 use std::fs::File;
@@ -6,7 +7,7 @@ use std::io::{BufWriter, Write};
 use std::mem;
 use std::ops::Add;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Reporter is responsible for periodically writing packet statistics to a CSV file.
@@ -42,13 +43,16 @@ impl Reporter {
         })
     }
 
-    pub fn start(&self, mut packet_info: Arc<PacketInfo>, signaller: Arc<ReporterSignaller>) {
+    pub fn start(
+        &self,
+        mut packet_info: Arc<Mutex<PacketInfo>>,
+        signaller: Arc<ReporterSignaller>,
+    ) {
         let mut buf_writer = BufWriter::new(&self.file);
         let mut header_written = false;
+        let mut next_reporting =
+            Local::now().add(TimeDelta::seconds(self.time_interval_secs as i64));
         loop {
-            let mut next_reporting =
-                Local::now().add(TimeDelta::seconds(self.time_interval_secs as i64));
-
             let mut status = signaller.mutex.lock().unwrap();
             if *status == ReporterStatus::STOPPED {
                 drop(status);
@@ -67,17 +71,19 @@ impl Reporter {
                 }
                 drop(status);
                 self.write_stats(&mut packet_info, &mut buf_writer, &mut header_written);
+                next_reporting =
+                    next_reporting.add(TimeDelta::seconds(self.time_interval_secs as i64));
             }
         }
     }
 
     fn write_stats(
         &self,
-        packet_info: &mut Arc<PacketInfo>,
+        packet_info: &mut Arc<Mutex<PacketInfo>>,
         buf_writer: &mut BufWriter<&File>,
         header_written: &mut bool,
     ) {
-        let mut packet_stats = packet_info.packets.lock().unwrap();
+        let mut packet_stats = &mut packet_info.lock().unwrap().packet_mapping;
         if packet_stats.is_empty() {
             return;
         }
