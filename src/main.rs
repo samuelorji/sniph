@@ -5,7 +5,7 @@ mod sniffed_packet;
 mod sniffer;
 mod utils;
 
-use crate::models::{PacketInfo, ReporterSignaller, ReporterStatus, Signaller, SniffStatus, IP};
+use crate::models::{IP, PacketInfo, ReporterSignaller, ReporterStatus, Signaller, SniffStatus};
 use crate::packet_filtering::PacketFilter;
 use crate::reporter::Reporter;
 use crate::sniffer::Sniffer;
@@ -61,7 +61,7 @@ fn main() {
         std::process::exit(0);
     }
 
-    let packet_info = Arc::new(PacketInfo::new());
+    let packet_info = Arc::new(Mutex::new(PacketInfo::new()));
 
     let sniffer_packet_info = Arc::clone(&packet_info);
 

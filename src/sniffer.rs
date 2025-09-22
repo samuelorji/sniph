@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::io::{BufWriter, stdout};
 use std::net::IpAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Sniffer is responsible for capturing packets on a specified network interface.
 /// It uses the pcap library to capture packets and etherparse to parse them.
@@ -87,7 +87,7 @@ impl Sniffer {
     pub fn start(
         self,
         signaller: Arc<Signaller>,
-        packet_info: Arc<PacketInfo>,
+        packet_info: Arc<Mutex<PacketInfo>>,
         packet_filter: Option<PacketFilter>,
     ) {
         let device_name = self.device.name.as_str();
@@ -97,7 +97,7 @@ impl Sniffer {
         let mut writer = BufWriter::with_capacity(1024, stdout());
         let mut captured_packets: u128 = 0;
         let mut skipped_packets: u128 = 0;
-        let mut ignored_packets: u128 = 0;
+        let mut filtered_packets: u128 = 0;
         let mut transferred_bytes: u128 = 0;
         let mut received_bytes: u128 = 0;
         let mut packets_sent: u128 = 0;
@@ -192,7 +192,7 @@ impl Sniffer {
                         format_number_to_bytes(received_bytes),
                         packets_sent,
                         packets_received,
-                        ignored_packets
+                        filtered_packets
                     );
                     drop(signal);
                     break;
@@ -239,7 +239,7 @@ impl Sniffer {
                                 if !filter.should_capture_with_ports(src_port, dest_port)
                                     || !filter.should_capture_with_transport(transport_protocol)
                                 {
-                                    ignored_packets += 1;
+                                    filtered_packets += 1;
                                     continue;
                                 }
                             }
@@ -352,7 +352,7 @@ impl Sniffer {
                             // check if  we need to filter out this packet based on ip
                             if let Some(filter) = &packet_filter {
                                 if !filter.should_capture_with_ips(&src_ip, &dest_ip) {
-                                    ignored_packets += 1;
+                                    filtered_packets += 1;
                                     continue;
                                 }
                             }
@@ -391,6 +391,7 @@ impl Sniffer {
                             );
 
                             writeln!(writer, "{}\r", &sniffed_packet);
+
                             let packet_link = PacketLink::new(
                                 sniffed_packet.src_ip,
                                 sniffed_packet.dest_ip,
@@ -399,8 +400,16 @@ impl Sniffer {
                                 sniffed_packet.transport_protocol,
                             );
 
-                            let mut info = packet_info.packets.lock().unwrap();
-                            match info.get_mut(&packet_link) {
+                            let mut info = packet_info.lock().unwrap();
+                            info.stats.captured_packets = captured_packets;
+                            info.stats.skipped_packets = skipped_packets;
+                            info.stats.filtered_packets = filtered_packets;
+                            info.stats.transferred_bytes = transferred_bytes;
+                            info.stats.received_bytes = received_bytes;
+                            info.stats.packets_sent = packets_sent;
+                            info.stats.packets_received = packets_received;
+
+                            match info.packet_mapping.get_mut(&packet_link) {
                                 None => {
                                     // insert new packet link stats
                                     let now = Local::now();
@@ -413,7 +422,7 @@ impl Sniffer {
                                         sniffed_packet.ip_version,
                                         application_protocol,
                                     );
-                                    info.insert(packet_link, packet_link_stats);
+                                    info.packet_mapping.insert(packet_link, packet_link_stats);
                                     drop(info);
                                 }
                                 Some(link_stats) => {
