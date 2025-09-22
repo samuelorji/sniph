@@ -405,7 +405,7 @@ impl Sniffer {
                                     // insert new packet link stats
                                     let now = Local::now();
                                     let packet_link_stats = PacketLinkStats::new(
-                                        packet_size,
+                                        packet_size as u128,
                                         1,
                                         now,
                                         now,
@@ -418,7 +418,7 @@ impl Sniffer {
                                 }
                                 Some(link_stats) => {
                                     link_stats.num_packets += 1;
-                                    link_stats.num_bytes += packet_size;
+                                    link_stats.num_bytes += packet_size as u128;
                                     link_stats.end_time = Local::now();
                                     drop(info)
                                 }

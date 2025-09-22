@@ -5,7 +5,7 @@ mod sniffed_packet;
 mod sniffer;
 mod utils;
 
-use crate::models::{PacketInfo, ReporterSignaller, ReporterStatus, Signaller, SniffStatus};
+use crate::models::{PacketInfo, ReporterSignaller, ReporterStatus, Signaller, SniffStatus, IP};
 use crate::packet_filtering::PacketFilter;
 use crate::reporter::Reporter;
 use crate::sniffer::Sniffer;
@@ -25,7 +25,7 @@ use std::thread::JoinHandle;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Print devices on system and exits
+    /// Prints devices found on system and exits
     #[arg(short, long)]
     devices: bool,
 
@@ -33,7 +33,8 @@ struct Args {
     #[arg(short, long)]
     interface: String,
 
-    /// output folder where report will be written to
+    /// output folder where report will be written to.
+    /// output will be a csv file with name YYYY_MM_DD_H_M_S.csv
     #[arg(short, long)]
     output: Option<PathBuf>,
 
@@ -172,6 +173,7 @@ fn read_user_input(signaller: Arc<Signaller>) {
             _ => (),
         }
     }
+    IP::UNCACHED("".to_string());
 }
 fn print_devices() {
     const DEVICE_COLUMN_WIDTH: usize = 20;

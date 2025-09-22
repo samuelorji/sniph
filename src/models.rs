@@ -158,8 +158,8 @@ impl PacketLink {
 }
 
 pub struct PacketLinkStats {
-    pub num_bytes: usize,
-    pub num_packets: usize,
+    pub num_bytes: u128,
+    pub num_packets: u128,
     pub start_time: chrono::DateTime<Local>,
     pub end_time: chrono::DateTime<Local>,
     pub traffic_direction: TrafficDirection,
@@ -169,8 +169,8 @@ pub struct PacketLinkStats {
 
 impl PacketLinkStats {
     pub fn new(
-        num_bytes: usize,
-        num_packets: usize,
+        num_bytes: u128,
+        num_packets: u128,
         start_time: chrono::DateTime<Local>,
         end_time: chrono::DateTime<Local>,
         traffic_direction: TrafficDirection,
