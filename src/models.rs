@@ -1,8 +1,10 @@
 use chrono::Local;
 use indexmap::IndexMap;
 use std::fmt;
-use std::fmt::Formatter;
-use std::sync::{Condvar, Mutex, Arc};
+use std::fmt::{Display, Formatter};
+use std::net::Ipv4Addr;
+use std::ops::Deref;
+use std::sync::{Arc, Condvar, Mutex};
 
 /// Enum representing the possible observed values of transport layer protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -130,8 +132,8 @@ impl fmt::Display for TrafficDirection {
 }
 #[derive(Hash, PartialEq, Eq)]
 pub struct PacketLink {
-    pub src_ip: String,
-    pub dest_ip: String,
+    pub src_ip: IP,
+    pub dest_ip: IP,
     pub src_port: u16,
     pub dest_port: u16,
     pub transport_protocol: TransportProtocol,
@@ -139,8 +141,8 @@ pub struct PacketLink {
 
 impl PacketLink {
     pub fn new(
-        src_ip: String,
-        dest_ip: String,
+        src_ip: IP,
+        dest_ip: IP,
         src_port: u16,
         dest_port: u16,
         transport_protocol: TransportProtocol,
@@ -216,4 +218,35 @@ impl ReporterSignaller {
             condvar: Condvar::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum IP {
+    CACHED(Arc<str>),
+    UNCACHED(String),
+}
+
+impl Display for IP {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            IP::CACHED(r) => f.pad(&r),
+            IP::UNCACHED(s) => f.pad(s),
+        }
+    }
+}
+
+impl Deref for IP {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            IP::CACHED(s) => &s,
+            IP::UNCACHED(s) => &s,
+        }
+    }
+}
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub enum IPOctet {
+    V4([u8; 4]),
+    V6([u8; 16]),
 }

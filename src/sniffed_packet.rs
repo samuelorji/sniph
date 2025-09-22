@@ -1,12 +1,12 @@
-use crate::models::{ApplicationProtocol, IPVersion, TrafficDirection, TransportProtocol};
+use crate::models::{ApplicationProtocol, IP, IPVersion, TrafficDirection, TransportProtocol};
 use chrono::Local;
 use std::fmt::{Display, Formatter, format};
 use std::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SniffedPacket {
-    pub src_ip: String,
-    pub dest_ip: String,
+    pub src_ip: IP,
+    pub dest_ip: IP,
     pub src_port: u16,
     pub dest_port: u16,
     pub ip_version: IPVersion,
@@ -18,8 +18,8 @@ pub struct SniffedPacket {
 
 impl SniffedPacket {
     pub fn new(
-        src_ip: String,
-        dest_ip: String,
+        src_ip: IP,
+        dest_ip: IP,
         src_port: u16,
         dest_port: u16,
         ip_version: IPVersion,
@@ -47,8 +47,8 @@ impl Display for SniffedPacket {
         let hyphen = format!("{}{}{}", "+", "-".repeat(185), "+");
         let msg = format!(
             "| {0:^45} | {1:^45} | {2:^9} | {3:^9} | {4:^6} | {5:^11} | {6:^8} | {7:^7} | {8:^19} |\r\n{9}",
-            self.src_ip,
-            self.dest_ip,
+            &self.src_ip,
+            &self.dest_ip,
             self.src_port,
             self.dest_port,
             self.ip_version,
