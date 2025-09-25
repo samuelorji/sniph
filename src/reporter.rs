@@ -29,6 +29,8 @@ pub struct Reporter {
     csv_file: File,
     // svg file to write data throughput graphs
     data_throughput_file: String,
+    // svg file to write packet throughput graphs
+    packet_throughput_file: String,
 }
 
 impl Reporter {
@@ -68,6 +70,7 @@ impl Reporter {
 
         let csv_file_name = report_folder.join("report.csv");
         let data_throughput_file_name = report_folder.join("data_throughput.svg");
+        let packet_throughput_file_name = report_folder.join("packet_throughput.svg");
         let file = File::options()
             .append(true)
             .create(true)
@@ -80,6 +83,7 @@ impl Reporter {
             wakeup_interval_secs: 2,
             csv_file: file,
             data_throughput_file: data_throughput_file_name.as_path().to_str().unwrap().to_string(),
+            packet_throughput_file: packet_throughput_file_name.as_path().to_str().unwrap().to_string(),
         })
     }
 
@@ -95,6 +99,8 @@ impl Reporter {
         let start_time = Local::now();
         let mut outgoing_data_throughput = OutgoingDataThroughputParams::new(&start_time);
         let mut incoming_data_throughput = IncomingDataThroughputParams::new(&start_time);
+        let mut outgoing_packet_throughput = OutgoingPacketThroughputParams::new(&start_time);
+        let mut incoming_packet_throughput = IncomingPacketThroughputParams::new(&start_time);
         let mut sleep_over = false;
         loop {
             sleep_over = false;
@@ -112,6 +118,8 @@ impl Reporter {
                     &mut data_throughput_graph_error,
                     &mut outgoing_data_throughput,
                     &mut incoming_data_throughput,
+                    &mut outgoing_packet_throughput,
+                    &mut incoming_packet_throughput,
                 );
 
                 if !data_throughput_graph_error.is_empty() {
@@ -143,6 +151,8 @@ impl Reporter {
                     &mut data_throughput_graph_error,
                     &mut outgoing_data_throughput,
                     &mut incoming_data_throughput,
+                    &mut outgoing_packet_throughput,
+                    &mut incoming_packet_throughput,
                 );
             }
         }
@@ -158,12 +168,19 @@ impl Reporter {
         data_throughput_graph_error: &mut String,
         outgoing_data_throughput_params: &mut OutgoingDataThroughputParams,
         incoming_data_throughput_params: &mut IncomingDataThroughputParams,
+        outgoing_packet_throughput_params: &mut OutgoingPacketThroughputParams,
+        incoming_packet_throughput_params: &mut IncomingPacketThroughputParams,
     ) {
         let mut packet_info_mutex = packet_info.lock().unwrap();
         outgoing_data_throughput_params.current_max_data_point =
             packet_info_mutex.stats.transferred_bytes;
         incoming_data_throughput_params.current_max_data_point =
             packet_info_mutex.stats.received_bytes;
+        outgoing_packet_throughput_params.current_max_data_point = packet_info_mutex.stats.packets_sent;
+        incoming_packet_throughput_params.current_max_data_point = packet_info_mutex.stats.packets_received;
+
+
+
         let mut packet_mapping = &mut packet_info_mutex.packet_mapping;
 
         let mut local_stats = IndexMap::new();
@@ -195,6 +212,11 @@ impl Reporter {
             incoming_data_throughput_params,
         )
         .map_err(|e| *data_throughput_graph_error = e);
+
+        self.write_packet_throughput_report(
+            outgoing_packet_throughput_params,
+            incoming_packet_throughput_params,
+        ).map_err(|e| *data_throughput_graph_error = e);
     }
 
     fn write_data_throughput_report(
@@ -361,12 +383,177 @@ impl Reporter {
         Ok(())
     }
 
+    // Duplicate of write data throughput ....
+    // No strength to make this DRY :)
+    fn write_packet_throughput_report(
+        &self,
+        outgoing_packet_throughput_params: &mut OutgoingPacketThroughputParams,
+        incoming_packet_throughput_params: &mut IncomingPacketThroughputParams,
+    ) -> Result<(), String> {
+        let now = Local::now();
+
+        let out = outgoing_packet_throughput_params;
+        out.time_in_seconds_since_start = now.sub(out.start_time).num_seconds();
+
+        println!(
+            "checkpoint current max [{}] at {:?}: {:?}\r",
+            out.current_max_data_point,
+            Local::now().to_string(),
+            (
+                out.time_in_seconds_since_start as u32,
+                (out.current_max_data_point - out.previous_data_point)
+            )
+        );
+
+        // transfer bytes update
+        let transfer_bytes_interval: u32 =
+            (out.current_max_data_point - out.previous_data_point) as u32;
+        if transfer_bytes_interval >= out.largest_throughput_delta {
+            out.largest_throughput_delta = transfer_bytes_interval;
+        }
+        out.throughput_record.push((
+            out.time_in_seconds_since_start as u32,
+            transfer_bytes_interval,
+        ));
+        out.previous_data_point = out.current_max_data_point;
+
+        let screen_resolution_width = 1280;
+        let screen_resolution_height = 720;
+
+        let graph_max_width: u32 = 1250;
+        let graph_max_height: u32 = 700;
+        let canvas = SVGBackend::new(
+            &self.packet_throughput_file,
+            (screen_resolution_width, screen_resolution_height),
+        )
+            .into_drawing_area();
+        canvas
+            .fill(&GREY_300)
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+        let (graph_window, _) = canvas.split_horizontally(graph_max_width);
+        let (mut tx_window, mut rx_window) =
+            graph_window.split_vertically(graph_max_height / 2);
+        tx_window = tx_window.margin(5, 0, 5, 5);
+        rx_window = rx_window.margin(5, 0, 5, 5);
+        let (_, footer) = canvas.split_vertically(graph_max_height);
+        footer
+            .titled(
+                &format!(
+                    "Charts are updated every {} seconds. Please reload to see changes",
+                    out.chart_update_time_interval_secs
+                ),
+                ("sans-serif", 18).into_font().color(&BLACK),
+            )
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+
+        let mut transfer_packets_chart = ChartBuilder::on(&tx_window)
+            // set title of chart
+            .caption(
+                "Outgoing Traffic Throughput: Packets/second",
+                ("sans-serif", 20),
+            )
+            // set the size of the label
+            .set_label_area_size(LabelAreaPosition::Left, 65)
+            .set_label_area_size(LabelAreaPosition::Bottom, 50)
+            // build a 2d cartesian, with the x axis being range of values (in our case will be time), y axis will be range of values for bytes transferred
+            .build_cartesian_2d(
+                0..out.time_in_seconds_since_start as u32,
+                0..(out.largest_throughput_delta as f64 * 1.2) as u32,
+            )
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+
+        transfer_packets_chart
+            .configure_mesh()
+            // define the labels
+            .y_desc("bytes/s")
+            .label_style(("sans-serif", 10))
+            .axis_desc_style(("sans-serif", 12))
+            .x_label_formatter(&|seconds| {
+                (*out.start_time + TimeDelta::seconds(*seconds as i64))
+                    .format("%H:%M:%S")
+                    .to_string()
+            })
+            .y_label_formatter(&|bits| format!("{}", format_number_to_units(*bits as u128)))
+            .draw()
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+        // we're copying the values in the vec, in our case, it should be the same as clone because the underlying
+        // vec type is a copy,
+        let rec = out.throughput_record.iter().copied();
+
+        let _ = transfer_packets_chart
+            .draw_series(AreaSeries::new(rec, 0, RED.filled()).border_style(&RED))
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+
+        drop(out); // make sure the outgoing variable is not mistakenly used anymore
+
+        /*
+        +---------------------+
+        | INCOMING DATA GRAPH |
+        +---------------------+
+        */
+        incoming_packet_throughput_params.time_in_seconds_since_start = now
+            .sub(incoming_packet_throughput_params.start_time)
+            .num_seconds();
+
+        let incoming = incoming_packet_throughput_params;
+        // received bytes update
+        let transfer_interval =
+            (incoming.current_max_data_point - incoming.previous_data_point) as u32;
+        if transfer_interval >= incoming.largest_throughput_delta {
+            incoming.largest_throughput_delta = transfer_interval;
+        }
+        incoming.throughput_record.push((
+            incoming.time_in_seconds_since_start as u32,
+            transfer_interval,
+        ));
+        incoming.previous_data_point = incoming.current_max_data_point;
+
+        let mut rx_bytes_chart = ChartBuilder::on(&rx_window)
+            // set title of chart
+            .caption(
+                "Incoming Traffic Throughput: Packets/second",
+                ("sans-serif", 20),
+            )
+            // set the size of the label
+            .set_label_area_size(LabelAreaPosition::Left, 65)
+            .set_label_area_size(LabelAreaPosition::Bottom, 50)
+            // build a 2d cartesian, with the x axis being range of values (in our case will be time), y axis will be range of values for bytes transferred
+            .build_cartesian_2d(
+                0..incoming.time_in_seconds_since_start as u32,
+                0..(incoming.largest_throughput_delta as f64 * 1.2) as u32,
+            )
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+
+        rx_bytes_chart
+            .configure_mesh()
+            // define the labels
+            .y_desc("bytes/s")
+            .label_style(("sans-serif", 10))
+            .axis_desc_style(("sans-serif", 12))
+            .x_label_formatter(&|seconds| {
+                (*incoming.start_time + TimeDelta::seconds(*seconds as i64))
+                    .format("%H:%M:%S")
+                    .to_string()
+            })
+            .y_label_formatter(&|bits| format!("{}", format_number_to_units(*bits as u128)))
+            .draw()
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+        // we're copying the values in the vec, in our case, it should be the same as clone because the underlying
+        // vec type is a copy,
+        let rec = incoming.throughput_record.iter().copied();
+
+        rx_bytes_chart
+            .draw_series(AreaSeries::new(rec, 0, BLUE.filled()).border_style(&BLUE))
+            .map_err(|e| format!("Error drawing graph: {}", e))?;
+
+        Ok(())
+    }
+
     fn write_csv_output(
         writer: &mut BufWriter<&File>,
         stats: IndexMap<PacketLink, PacketLinkStats>,
         header_written: &mut bool,
     ) {
-        println!("Writing report at {} \r", Local::now());
         if !*header_written {
             writer.write_all(
                 format!(
@@ -452,6 +639,59 @@ impl<'a> IncomingDataThroughputParams<'a> {
         let mut record: Vec<(u32, u32)> = Vec::with_capacity(1000);
         record.push((0, 0));
         IncomingDataThroughputParams {
+            start_time,
+            time_in_seconds_since_start: 0,
+            current_max_data_point: 0,
+            previous_data_point: 0,
+            largest_throughput_delta: 0,
+            throughput_record: record,
+            chart_update_time_interval_secs: 2,
+        }
+    }
+}
+
+struct IncomingPacketThroughputParams<'a> {
+    start_time: &'a DateTime<Local>,
+    time_in_seconds_since_start: i64,
+    current_max_data_point: u128,
+    previous_data_point: u128,
+    largest_throughput_delta: u32,
+    throughput_record: Vec<(u32, u32)>,
+    chart_update_time_interval_secs: u8,
+}
+
+impl<'a> IncomingPacketThroughputParams<'a> {
+    fn new(start_time: &'a DateTime<Local>) -> Self {
+        let mut record: Vec<(u32, u32)> = Vec::with_capacity(1000);
+        record.push((0, 0));
+        IncomingPacketThroughputParams {
+            start_time,
+            time_in_seconds_since_start: 0,
+            current_max_data_point: 0,
+            previous_data_point: 0,
+            largest_throughput_delta: 0,
+            throughput_record: record,
+            chart_update_time_interval_secs: 2,
+        }
+    }
+}
+
+
+struct OutgoingPacketThroughputParams<'a> {
+    start_time: &'a DateTime<Local>,
+    time_in_seconds_since_start: i64,
+    current_max_data_point: u128,
+    previous_data_point: u128,
+    largest_throughput_delta: u32,
+    throughput_record: Vec<(u32, u32)>,
+    chart_update_time_interval_secs: u8,
+}
+
+impl<'a> OutgoingPacketThroughputParams<'a> {
+    fn new(start_time: &'a DateTime<Local>) -> Self {
+        let mut record: Vec<(u32, u32)> = Vec::with_capacity(1000);
+        record.push((0, 0));
+        OutgoingPacketThroughputParams {
             start_time,
             time_in_seconds_since_start: 0,
             current_max_data_point: 0,
