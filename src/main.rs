@@ -31,7 +31,7 @@ struct Args {
 
     /// interface to sniff
     #[arg(short, long)]
-    interface: String,
+    interface: Option<String>,
 
     /// output folder where report will be written to.
     /// output will be a csv file with name YYYY_MM_DD_H_M_S.csv
@@ -52,6 +52,11 @@ struct Args {
     /// >, <, >=, <= operators are numeric comparisons and only valid for ports
     #[arg(short, long, verbatim_doc_comment)]
     filter: Option<String>,
+
+    /// time window to group packet statistics together before writing to output file
+    /// Not supplying a window means that statistics will be aggregated in memory for the entire length of the program running which can lead to increased memory consumption
+    #[arg(short, long, verbatim_doc_comment)]
+    window: Option<u32>,
 }
 
 fn main() {
@@ -60,7 +65,10 @@ fn main() {
         print_devices();
         std::process::exit(0);
     }
-
+    let interface = args.interface.unwrap_or_else(|| {
+        eprintln!("No interface provided!");
+        std::process::exit(1);
+    });
     let packet_info = Arc::new(Mutex::new(PacketInfo::new()));
 
     let sniffer_packet_info = Arc::clone(&packet_info);
@@ -79,7 +87,7 @@ fn main() {
     let report_join_handle = match args.output {
         None => None,
         Some(output_folder) => {
-            let reporter = Reporter::new(output_folder).unwrap_or_else(|e| {
+            let reporter = Reporter::new(output_folder, args.window).unwrap_or_else(|e| {
                 eprintln!("{}", format!("Failed to Create Reporter: {}", e));
                 std::process::exit(1)
             });
@@ -99,7 +107,7 @@ fn main() {
     let input_signal = Arc::clone(&signaller);
 
     enable_raw_mode().unwrap();
-    let sniffer_handle = match Sniffer::new(args.interface) {
+    let sniffer_handle = match Sniffer::new(interface) {
         Ok(sniffer) => std::thread::spawn(move || {
             sniffer.start(packet_parser_signal, sniffer_packet_info, packet_filter)
         }),

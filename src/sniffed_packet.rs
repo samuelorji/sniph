@@ -3,7 +3,7 @@ use chrono::Local;
 use std::fmt::{Display, Formatter, format};
 use std::time::Instant;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SniffedPacket {
     pub src_ip: IP,
     pub dest_ip: IP,
