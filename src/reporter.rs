@@ -19,7 +19,6 @@ use std::time::Duration;
 /// Reporter is responsible for periodically writing packet statistics to a CSV file.
 /// It runs in its own thread and checks for a stop signal to terminate gracefully.
 /// It uses a mutex to safely access shared packet information with the sniffer thread.
-/// It creates a new CSV file in the specified output folder with a timestamped filename.
 pub struct Reporter {
     output_folder: PathBuf,
     // interval to write to csv file after wakeup
@@ -37,16 +36,25 @@ impl Reporter {
         output_folder: PathBuf,
         time_interval_secs: Option<u32>,
     ) -> Result<Reporter, String> {
-        if let Ok(false) = std::fs::exists(&output_folder) {
-            // output folder doesn't exist, create it
-            std::fs::create_dir(&output_folder)
-                .map_err(|e| format!("Failed to create output folder: {}", e))?
+        let formatted_date = Local::now().format("%Y_%m_%d_%H_%M_%S");
+        let report_folder =  output_folder.join(format!("report_{}", &formatted_date));
+
+        match std::fs::exists(&report_folder) {
+            Ok(exists) => {
+                if !exists {
+                    std::fs::create_dir_all(&report_folder)
+                        .map_err(|e| format!("Failed to create output folder: {}", e))?;
+                } else {
+                    println!("Report folder already exists, will overwrite reports within\r");
+                }
+            },
+            Err(_) =>  return Err(format!("Failed to report folder: {}", &report_folder.to_str().unwrap()))
         }
 
         let csv_write_interval = match time_interval_secs {
             None => Ok(None),
             Some(supplied_interval) => {
-                if (supplied_interval > 60 || supplied_interval < 2) && supplied_interval % 2 == 0 {
+                if supplied_interval > 60 || supplied_interval < 2 || supplied_interval % 2 != 0 {
                     Err(
                         "time window must be an even number not greater than 60 or less than 2"
                             .to_string(),
@@ -57,12 +65,13 @@ impl Reporter {
             }
         }?;
 
-        let formatted_date = Local::now().format("%Y_%m_%d_%H_%M_%S");
-        let file_name = output_folder.join(format!("{}.csv", &formatted_date));
+
+        let csv_file_name = report_folder.join("report.csv");
+        let data_throughput_file_name = report_folder.join("data_throughput.svg");
         let file = File::options()
             .append(true)
             .create(true)
-            .open(file_name)
+            .open(csv_file_name)
             .map_err(|e| format!("Failed to open output file, reason: {}", e))?;
 
         Ok(Reporter {
@@ -70,7 +79,7 @@ impl Reporter {
             csv_write_interval,
             wakeup_interval_secs: 2,
             csv_file: file,
-            data_throughput_file: format!("{}_data.svg", formatted_date),
+            data_throughput_file: data_throughput_file_name.as_path().to_str().unwrap().to_string(),
         })
     }
 

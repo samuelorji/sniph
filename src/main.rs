@@ -79,7 +79,7 @@ fn main() {
     let packet_filter = match args.filter {
         None => None,
         Some(filter_string) => Some(PacketFilter::new(&filter_string).unwrap_or_else(|e| {
-            eprintln!("{}", format!("Failed to Parse Packet filter: {}", e));
+            eprintln!("{}", format!("Error: {}", e));
             std::process::exit(1);
         })),
     };
@@ -88,7 +88,7 @@ fn main() {
         None => None,
         Some(output_folder) => {
             let reporter = Reporter::new(output_folder, args.window).unwrap_or_else(|e| {
-                eprintln!("{}", format!("Failed to Create Reporter: {}", e));
+                eprintln!("{}", format!("Error: {}", e));
                 std::process::exit(1)
             });
             let handle =
