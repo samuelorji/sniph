@@ -4,7 +4,7 @@ use crate::models::{
 };
 use crate::packet_filtering::PacketFilter;
 use crate::sniffed_packet::SniffedPacket;
-use crate::utils::format_number_to_bytes;
+use crate::utils::format_number_to_units;
 use chrono::Local;
 use clap::builder::Str;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
@@ -188,8 +188,8 @@ impl Sniffer {
                         "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
                         captured_packets,
                         skipped_packets,
-                        format_number_to_bytes(transferred_bytes),
-                        format_number_to_bytes(received_bytes),
+                        format_number_to_units(transferred_bytes) + "B",
+                        format_number_to_units(received_bytes) + "B",
                         packets_sent,
                         packets_received,
                         filtered_packets
@@ -210,7 +210,7 @@ impl Sniffer {
                     let mut transport_protocol = TransportProtocol::Other;
                     let mut timestamp = Local::now();
                     let mut ip_version: IPVersion = IPVersion::IPV4;
-                    let mut packet_size: usize = packet.header.len as usize;
+                    let mut packet_size: u128 = packet.header.len as u128;
                     let mut skip = false;
                     let mut traffic_direction = TrafficDirection::OTHER;
                     let headers = PacketHeaders::from_ethernet_slice(&packet.data).unwrap();
@@ -370,11 +370,11 @@ impl Sniffer {
 
                             match traffic_direction {
                                 TrafficDirection::INCOMING | TrafficDirection::MULTICAST => {
-                                    received_bytes += packet_size as u128;
+                                    received_bytes += packet_size;
                                     packets_received += 1;
                                 }
                                 _ => {
-                                    transferred_bytes += packet_size as u128;
+                                    transferred_bytes += packet_size;
                                     packets_sent += 1
                                 }
                             }
@@ -390,7 +390,7 @@ impl Sniffer {
                                 timestamp,
                             );
 
-                            writeln!(writer, "{}\r", &sniffed_packet);
+                            //writeln!(writer, "{}\r", &sniffed_packet);
 
                             let packet_link = PacketLink::new(
                                 sniffed_packet.src_ip,
