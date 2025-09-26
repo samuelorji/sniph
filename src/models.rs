@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::{DateTime, Local};
 use indexmap::IndexMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -214,6 +214,7 @@ impl PacketStatistics {
 pub struct PacketInfo {
     pub stats: PacketStatistics,
     pub packet_mapping: IndexMap<PacketLink, PacketLinkStats>,
+    pub current_write_time_window: Arc<DateTime<Local>>,
 }
 
 impl PacketInfo {
@@ -221,6 +222,7 @@ impl PacketInfo {
         PacketInfo {
             stats: PacketStatistics::new(),
             packet_mapping: IndexMap::new(),
+            current_write_time_window: Arc::new(Local::now()),
         }
     }
 }

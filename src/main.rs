@@ -38,6 +38,10 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
+    // If captured packets should be printed to stdout in realtime, quiet mode can result in better performance as there won't be calls to print to console
+    #[arg(short, long, default_value = "false")]
+    quiet: bool,
+
     /// Filters to apply to captured packets
     /// E.g src_port > 8000 or dst_port < 4000 . Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
     /// Each filter should be in the format <field> <operator> <value>
@@ -107,7 +111,7 @@ fn main() {
     let input_signal = Arc::clone(&signaller);
 
     enable_raw_mode().unwrap();
-    let sniffer_handle = match Sniffer::new(interface) {
+    let sniffer_handle = match Sniffer::new(interface, args.quiet) {
         Ok(sniffer) => std::thread::spawn(move || {
             sniffer.start(packet_parser_signal, sniffer_packet_info, packet_filter)
         }),
