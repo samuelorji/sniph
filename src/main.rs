@@ -38,6 +38,11 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
+    // size of print buffer, if set to 0, packets will be printed to stdout immediately.
+    // if set to a larger number, calls to stdout will be buffered up to this value and then written to stdout.
+    #[arg(short, long, default_value = "1024")]
+    buffer: u16,
+
     // If captured packets should be printed to stdout in realtime, quiet mode can result in better performance as there won't be calls to print to console
     #[arg(short, long, default_value = "false")]
     quiet: bool,
@@ -111,7 +116,7 @@ fn main() {
     let input_signal = Arc::clone(&signaller);
 
     enable_raw_mode().unwrap();
-    let sniffer_handle = match Sniffer::new(interface, args.quiet) {
+    let sniffer_handle = match Sniffer::new(interface, args.quiet, args.buffer) {
         Ok(sniffer) => std::thread::spawn(move || {
             sniffer.start(packet_parser_signal, sniffer_packet_info, packet_filter)
         }),
