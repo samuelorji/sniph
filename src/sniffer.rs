@@ -23,10 +23,11 @@ pub struct Sniffer {
     interface: String,
     device: Device,
     quiet: bool,
+    stdout_buffer_size: usize,
 }
 
 impl Sniffer {
-    pub fn new(interface: String, quiet: bool) -> Result<Sniffer, String> {
+    pub fn new(interface: String, quiet: bool, buffer_size : u16) -> Result<Sniffer, String> {
         let mut adapter_as_device: Option<Device> = None;
         let devices = Device::list().expect("Could not list devices");
         for device in devices {
@@ -42,6 +43,7 @@ impl Sniffer {
                 interface,
                 device: adapter_as_device.unwrap(),
                 quiet,
+                stdout_buffer_size: buffer_size as usize,
             })
         }
     }
@@ -96,7 +98,7 @@ impl Sniffer {
         println!("Starting sniffer for interface '{}'\r", &device_name);
 
         // use a smaller buffer so output is printed faster to console
-        let mut writer = BufWriter::with_capacity(1024, stdout());
+        let mut writer = BufWriter::with_capacity(self.stdout_buffer_size, stdout());
         let mut captured_packets: u128 = 0;
         let mut skipped_packets: u128 = 0;
         let mut filtered_packets: u128 = 0;
@@ -193,7 +195,7 @@ impl Sniffer {
                     }
                     writeln!(
                         writer,
-                        "\r\n-------\r\nCaptured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
+                        "\r\n\r\nCaptured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
                         captured_packets,
                         skipped_packets,
                         format_number_to_units(transferred_bytes) + "B",
