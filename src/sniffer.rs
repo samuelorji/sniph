@@ -5,7 +5,7 @@ use crate::models::{
 use crate::packet_filtering::PacketFilter;
 use crate::sniffed_packet::SniffedPacket;
 use crate::utils::format_number_to_units;
-use chrono::Local;
+use chrono::{DateTime, Local};
 use clap::builder::Str;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
 use pcap::{Capture, Device};
@@ -22,10 +22,11 @@ use std::sync::{Arc, Mutex};
 pub struct Sniffer {
     interface: String,
     device: Device,
+    quiet: bool,
 }
 
 impl Sniffer {
-    pub fn new(interface: String) -> Result<Sniffer, String> {
+    pub fn new(interface: String, quiet: bool) -> Result<Sniffer, String> {
         let mut adapter_as_device: Option<Device> = None;
         let devices = Device::list().expect("Could not list devices");
         for device in devices {
@@ -40,6 +41,7 @@ impl Sniffer {
             Ok(Sniffer {
                 interface,
                 device: adapter_as_device.unwrap(),
+                quiet,
             })
         }
     }
@@ -102,6 +104,7 @@ impl Sniffer {
         let mut received_bytes: u128 = 0;
         let mut packets_sent: u128 = 0;
         let mut packets_received: u128 = 0;
+        let mut current_time_window : Arc<DateTime<Local>> = Arc::new(Local::now());
 
         let addresses = self
             .device
@@ -140,7 +143,9 @@ impl Sniffer {
             "timestamp",
         );
 
-        writeln!(writer, "{}\n{}{}\r", hyphen, header, hyphen);
+        if !self.quiet {
+            writeln!(writer, "{}\n{}{}\r", hyphen, header, hyphen);
+        }
 
         let mut cap;
         cap = Capture::from_device(device_name)
@@ -188,7 +193,7 @@ impl Sniffer {
                     }
                     writeln!(
                         writer,
-                        "Captured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
+                        "\r\n-------\r\nCaptured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
                         captured_packets,
                         skipped_packets,
                         format_number_to_units(transferred_bytes) + "B",
@@ -430,7 +435,10 @@ impl Sniffer {
                                 timestamp,
                             );
 
-                            writeln!(writer, "{}\r", &sniffed_packet);
+                            if !self.quiet {
+                                // only write to stdout if in non-quiet mode
+                                writeln!(writer, "{}\r", &sniffed_packet);
+                            }
 
                             let packet_link = PacketLink::new(
                                 sniffed_packet.src_ip,
@@ -441,6 +449,11 @@ impl Sniffer {
                             );
 
                             let mut info = packet_info.lock().unwrap();
+
+                            if info.packet_mapping.is_empty() {
+                                // we've either just started or started a new window
+                                current_time_window = Arc::new(Local::now());
+                            }
 
                             info.stats.captured_packets = captured_packets;
                             info.stats.skipped_packets = skipped_packets;
@@ -464,11 +477,12 @@ impl Sniffer {
                                         application_protocol,
                                     );
                                     info.packet_mapping.insert(packet_link, packet_link_stats);
+                                    info.current_write_time_window = current_time_window.clone();
                                     drop(info);
                                 }
                                 Some(link_stats) => {
                                     link_stats.num_packets += 1;
-                                    link_stats.num_bytes += packet_size as u128;
+                                    link_stats.num_bytes += packet_size;
                                     link_stats.end_time = Local::now();
                                     drop(info)
                                 }

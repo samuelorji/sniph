@@ -193,6 +193,7 @@ impl Reporter {
         incoming_packet_throughput_params.current_max_data_point =
             packet_info_mutex.stats.packets_received;
 
+        let current_write_time_window = packet_info_mutex.current_write_time_window.clone();
         let mut packet_mapping = &mut packet_info_mutex.packet_mapping;
 
         let mut local_stats = IndexMap::new();
@@ -214,7 +215,7 @@ impl Reporter {
         drop(packet_info_mutex);
 
         if !local_stats.is_empty() {
-            Self::write_csv_output(&mut buf_writer, local_stats, &mut header_written);
+            Self::write_csv_output(&mut buf_writer, local_stats,current_write_time_window, &mut header_written);
         }
 
         // TODO
@@ -241,17 +242,6 @@ impl Reporter {
 
         let out = outgoing_data_throughput_params;
         out.time_in_seconds_since_start = now.sub(out.start_time).num_seconds();
-
-        println!(
-            "checkpoint current max [{}] at {:?}: {:?}\r",
-            out.current_max_data_point,
-            Local::now().to_string(),
-            (
-                out.time_in_seconds_since_start as u32,
-                (out.current_max_data_point - out.previous_data_point)
-            )
-        );
-
         // transfer bytes update
         let transfer_bytes_interval: u32 =
             (out.current_max_data_point - out.previous_data_point) as u32;
@@ -408,16 +398,6 @@ impl Reporter {
         let out = outgoing_packet_throughput_params;
         out.time_in_seconds_since_start = now.sub(out.start_time).num_seconds();
 
-        println!(
-            "checkpoint current max [{}] at {:?}: {:?}\r",
-            out.current_max_data_point,
-            Local::now().to_string(),
-            (
-                out.time_in_seconds_since_start as u32,
-                (out.current_max_data_point - out.previous_data_point)
-            )
-        );
-
         // transfer bytes update
         let transfer_bytes_interval: u32 =
             (out.current_max_data_point - out.previous_data_point) as u32;
@@ -564,12 +544,13 @@ impl Reporter {
     fn write_csv_output(
         writer: &mut BufWriter<&File>,
         stats: IndexMap<PacketLink, PacketLinkStats>,
+        current_time_window: Arc<DateTime<Local>>,
         header_written: &mut bool,
     ) {
         if !*header_written {
             writer.write_all(
                 format!(
-                    "{},{},{},{},{},{},{},{},{},{},{}",
+                    "{},{},{},{},{},{},{},{},{},{},{},{}",
                     "src_ip",
                     "dest_ip",
                     "src_port",
@@ -580,7 +561,8 @@ impl Reporter {
                     "num_packets",
                     "bytes_transferred",
                     "start_time",
-                    "end_time"
+                    "end_time",
+                    "time_window_start"
                 )
                 .as_bytes(),
             );
@@ -589,7 +571,7 @@ impl Reporter {
         for (link, stats) in stats {
             writer.write_all(
                 format!(
-                    "\n{},{},{},{},{},{},{},{},{},{},{}",
+                    "\n{},{},{},{},{},{},{},{},{},{},{},{}",
                     link.src_ip,
                     link.dest_ip,
                     link.src_port,
@@ -600,7 +582,9 @@ impl Reporter {
                     stats.num_packets,
                     stats.num_bytes,
                     stats.start_time.format("%Y-%m-%d %H:%M:%S"),
-                    stats.end_time.format("%Y-%m-%d %H:%M:%S")
+                    stats.end_time.format("%Y-%m-%d %H:%M:%S"),
+                    current_time_window.format("%Y-%m-%d %H:%M:%S")
+
                 )
                 .as_bytes(),
             );
