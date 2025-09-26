@@ -39,7 +39,7 @@ impl Reporter {
         time_interval_secs: Option<u32>,
     ) -> Result<Reporter, String> {
         let formatted_date = Local::now().format("%Y_%m_%d_%H_%M_%S");
-        let report_folder =  output_folder.join(format!("report_{}", &formatted_date));
+        let report_folder = output_folder.join(format!("report_{}", &formatted_date));
 
         match std::fs::exists(&report_folder) {
             Ok(exists) => {
@@ -49,8 +49,13 @@ impl Reporter {
                 } else {
                     println!("Report folder already exists, will overwrite reports within\r");
                 }
-            },
-            Err(_) =>  return Err(format!("Failed to report folder: {}", &report_folder.to_str().unwrap()))
+            }
+            Err(_) => {
+                return Err(format!(
+                    "Failed to report folder: {}",
+                    &report_folder.to_str().unwrap()
+                ));
+            }
         }
 
         let csv_write_interval = match time_interval_secs {
@@ -67,7 +72,6 @@ impl Reporter {
             }
         }?;
 
-
         let csv_file_name = report_folder.join("report.csv");
         let data_throughput_file_name = report_folder.join("data_throughput.svg");
         let packet_throughput_file_name = report_folder.join("packet_throughput.svg");
@@ -82,8 +86,16 @@ impl Reporter {
             csv_write_interval,
             wakeup_interval_secs: 2,
             csv_file: file,
-            data_throughput_file: data_throughput_file_name.as_path().to_str().unwrap().to_string(),
-            packet_throughput_file: packet_throughput_file_name.as_path().to_str().unwrap().to_string(),
+            data_throughput_file: data_throughput_file_name
+                .as_path()
+                .to_str()
+                .unwrap()
+                .to_string(),
+            packet_throughput_file: packet_throughput_file_name
+                .as_path()
+                .to_str()
+                .unwrap()
+                .to_string(),
         })
     }
 
@@ -176,10 +188,10 @@ impl Reporter {
             packet_info_mutex.stats.transferred_bytes;
         incoming_data_throughput_params.current_max_data_point =
             packet_info_mutex.stats.received_bytes;
-        outgoing_packet_throughput_params.current_max_data_point = packet_info_mutex.stats.packets_sent;
-        incoming_packet_throughput_params.current_max_data_point = packet_info_mutex.stats.packets_received;
-
-
+        outgoing_packet_throughput_params.current_max_data_point =
+            packet_info_mutex.stats.packets_sent;
+        incoming_packet_throughput_params.current_max_data_point =
+            packet_info_mutex.stats.packets_received;
 
         let mut packet_mapping = &mut packet_info_mutex.packet_mapping;
 
@@ -216,7 +228,8 @@ impl Reporter {
         self.write_packet_throughput_report(
             outgoing_packet_throughput_params,
             incoming_packet_throughput_params,
-        ).map_err(|e| *data_throughput_graph_error = e);
+        )
+        .map_err(|e| *data_throughput_graph_error = e);
     }
 
     fn write_data_throughput_report(
@@ -426,13 +439,12 @@ impl Reporter {
             &self.packet_throughput_file,
             (screen_resolution_width, screen_resolution_height),
         )
-            .into_drawing_area();
+        .into_drawing_area();
         canvas
             .fill(&GREY_300)
             .map_err(|e| format!("Error drawing graph: {}", e))?;
         let (graph_window, _) = canvas.split_horizontally(graph_max_width);
-        let (mut tx_window, mut rx_window) =
-            graph_window.split_vertically(graph_max_height / 2);
+        let (mut tx_window, mut rx_window) = graph_window.split_vertically(graph_max_height / 2);
         tx_window = tx_window.margin(5, 0, 5, 5);
         rx_window = rx_window.margin(5, 0, 5, 5);
         let (_, footer) = canvas.split_vertically(graph_max_height);
@@ -675,7 +687,6 @@ impl<'a> IncomingPacketThroughputParams<'a> {
         }
     }
 }
-
 
 struct OutgoingPacketThroughputParams<'a> {
     start_time: &'a DateTime<Local>,

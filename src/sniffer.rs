@@ -110,18 +110,21 @@ impl Sniffer {
             .map(|e| e.addr)
             .collect::<Vec<IpAddr>>();
 
-        let mut address_map: HashMap<IPOctet, Arc<str>> = HashMap::new();
-        for address in addresses {
-            let arc: Arc<str> = Arc::from(address.to_string().as_str());
-            match address {
+        let mut local_address_map: HashMap<IPOctet, Arc<str>> = HashMap::new();
+        for local_addresses in addresses {
+            let arc: Arc<str> = Arc::from(local_addresses.to_string().as_str());
+            match local_addresses {
                 IpAddr::V4(address) => {
-                    address_map.insert(IPOctet::V4(address.octets()), arc);
+                    local_address_map.insert(IPOctet::V4(address.octets()), arc);
                 }
                 IpAddr::V6(address) => {
-                    address_map.insert(IPOctet::V6(address.octets()), arc);
+                    local_address_map.insert(IPOctet::V6(address.octets()), arc);
                 }
             }
         }
+
+        // start with a relatively decent buffer
+        let mut external_addresses: HashMap<IPOctet, Arc<str>> = HashMap::with_capacity(1_000);
 
         let hyphen = format!("{}{}{}\r", "+", "-".repeat(185), "+");
         let header = format!(
@@ -217,6 +220,11 @@ impl Sniffer {
                     match headers.net {
                         None => continue,
                         Some(netHeaders) => {
+                            // check  that our external address map hasn't exceeded 10,000
+                            if external_addresses.len() > 10_000 {
+                                // start at 1000 again.
+                                external_addresses = HashMap::with_capacity(1_000)
+                            }
                             match headers.transport {
                                 None => skip = true,
                                 Some(transport) => match transport {
@@ -254,21 +262,39 @@ impl Sniffer {
                                     let source_octets = IPOctet::V4(header.source);
                                     let dest_octets = IPOctet::V4(header.destination);
 
-                                    if let Some(ip) = address_map.get(&source_octets) {
+                                    if let Some(ip) = local_address_map.get(&source_octets) {
                                         traffic_direction = TrafficDirection::OUTGOING;
                                         src_ip = IP::CACHED(ip.clone());
-                                        if let IPOctet::V4(octet) = dest_octets {
-                                            dest_ip = IP::UNCACHED(
-                                                octet.map(|oct| oct.to_string()).join("."),
-                                            );
+                                        if let Some(dest) = external_addresses.get(&dest_octets) {
+                                            dest_ip = IP::CACHED(dest.clone());
+                                        } else {
+                                            if let IPOctet::V4(octet) = dest_octets {
+                                                let arc: Arc<str> = Arc::from(
+                                                    octet
+                                                        .map(|oct| oct.to_string())
+                                                        .join(".")
+                                                        .as_str(),
+                                                );
+                                                dest_ip = IP::CACHED(arc.clone());
+                                                external_addresses.insert(IPOctet::V4(octet), arc);
+                                            }
                                         }
-                                    } else if let Some(ip) = address_map.get(&dest_octets) {
+                                    } else if let Some(ip) = local_address_map.get(&dest_octets) {
                                         traffic_direction = TrafficDirection::INCOMING;
                                         dest_ip = IP::CACHED(ip.clone());
-                                        if let IPOctet::V4(octet) = source_octets {
-                                            src_ip = IP::UNCACHED(
-                                                octet.map(|oct| oct.to_string()).join("."),
-                                            );
+                                        if let Some(src) = external_addresses.get(&source_octets) {
+                                            src_ip = IP::CACHED(src.clone());
+                                        } else {
+                                            if let IPOctet::V4(octet) = source_octets {
+                                                let arc: Arc<str> = Arc::from(
+                                                    octet
+                                                        .map(|oct| oct.to_string())
+                                                        .join(".")
+                                                        .as_str(),
+                                                );
+                                                src_ip = IP::CACHED(arc.clone());
+                                                external_addresses.insert(IPOctet::V4(octet), arc);
+                                            }
                                         }
                                     } else {
                                         if let IPOctet::V4(octet) = source_octets {
@@ -293,29 +319,43 @@ impl Sniffer {
                                     let source_octets = IPOctet::V6(header.source);
                                     let dest_octets = IPOctet::V6(header.destination);
 
-                                    if let Some(ip) = address_map.get(&source_octets) {
+                                    if let Some(ip) = local_address_map.get(&source_octets) {
                                         traffic_direction = TrafficDirection::OUTGOING;
                                         src_ip = IP::CACHED(ip.clone());
-                                        if let IPOctet::V6(octet) = dest_octets {
-                                            dest_ip = IP::UNCACHED(
-                                                prettify_ip::parse_ipv6_decimal_dotted(
-                                                    &octet.map(|oct| oct.to_string()).join("."),
-                                                )
-                                                .unwrap()
-                                                .to_string(),
-                                            );
+                                        if let Some(dest) = external_addresses.get(&dest_octets) {
+                                            dest_ip = IP::CACHED(dest.clone());
+                                        } else {
+                                            if let IPOctet::V6(octet) = dest_octets {
+                                                let arc: Arc<str> = Arc::from(
+                                                    prettify_ip::parse_ipv6_decimal_dotted(
+                                                        &octet.map(|oct| oct.to_string()).join("."),
+                                                    )
+                                                    .unwrap()
+                                                    .to_string()
+                                                    .as_str(),
+                                                );
+                                                dest_ip = IP::CACHED(arc.clone());
+                                                external_addresses.insert(IPOctet::V6(octet), arc);
+                                            }
                                         }
-                                    } else if let Some(ip) = address_map.get(&dest_octets) {
+                                    } else if let Some(ip) = local_address_map.get(&dest_octets) {
                                         traffic_direction = TrafficDirection::INCOMING;
                                         dest_ip = IP::CACHED(ip.clone());
-                                        if let IPOctet::V6(octet) = source_octets {
-                                            src_ip = IP::UNCACHED(
-                                                prettify_ip::parse_ipv6_decimal_dotted(
-                                                    &octet.map(|oct| oct.to_string()).join("."),
-                                                )
-                                                .unwrap()
-                                                .to_string(),
-                                            );
+                                        if let Some(src) = external_addresses.get(&source_octets) {
+                                            src_ip = IP::CACHED(src.clone());
+                                        } else {
+                                            if let IPOctet::V6(octet) = source_octets {
+                                                let arc: Arc<str> = Arc::from(
+                                                    prettify_ip::parse_ipv6_decimal_dotted(
+                                                        &octet.map(|oct| oct.to_string()).join("."),
+                                                    )
+                                                    .unwrap()
+                                                    .to_string()
+                                                    .as_str(),
+                                                );
+                                                src_ip = IP::CACHED(arc.clone());
+                                                external_addresses.insert(IPOctet::V6(octet), arc);
+                                            }
                                         }
                                     } else {
                                         if let IPOctet::V6(octet) = dest_octets {
@@ -390,7 +430,7 @@ impl Sniffer {
                                 timestamp,
                             );
 
-                            //writeln!(writer, "{}\r", &sniffed_packet);
+                            writeln!(writer, "{}\r", &sniffed_packet);
 
                             let packet_link = PacketLink::new(
                                 sniffed_packet.src_ip,
@@ -401,6 +441,7 @@ impl Sniffer {
                             );
 
                             let mut info = packet_info.lock().unwrap();
+
                             info.stats.captured_packets = captured_packets;
                             info.stats.skipped_packets = skipped_packets;
                             info.stats.filtered_packets = filtered_packets;
