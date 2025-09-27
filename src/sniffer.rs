@@ -24,10 +24,11 @@ pub struct Sniffer {
     device: Device,
     quiet: bool,
     stdout_buffer_size: usize,
+    max_packet_size: u16,
 }
 
 impl Sniffer {
-    pub fn new(interface: String, quiet: bool, buffer_size: u16) -> Result<Sniffer, String> {
+    pub fn new(interface: String, quiet: bool, buffer_size: u16, max_packet_size: u16) -> Result<Sniffer, String> {
         let mut adapter_as_device: Option<Device> = None;
         let devices = Device::list().expect("Could not list devices");
         for device in devices {
@@ -44,6 +45,7 @@ impl Sniffer {
                 device: adapter_as_device.unwrap(),
                 quiet,
                 stdout_buffer_size: buffer_size as usize,
+                max_packet_size,
             })
         }
     }
@@ -155,7 +157,7 @@ impl Sniffer {
             .unwrap()
             .promisc(true)
             .timeout(1000)
-            .snaplen(4000) // we only need the header, we don't need the body
+            .snaplen(self.max_packet_size as i32) 
             .immediate_mode(true)
             .open()
             .unwrap();

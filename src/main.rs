@@ -66,6 +66,14 @@ struct Args {
     /// Not supplying a window means that statistics will be aggregated in memory for the entire length of the program running which can lead to increased memory consumption
     #[arg(short, long, verbatim_doc_comment)]
     window: Option<u32>,
+
+    /// Optional packet size limit for captured packets
+    /// Setting to a lower value can result in better performance as less data is copied from kernel space to user space
+    /// However, setting to a lower value means that some packets may be truncated and therefore dropped by the packet parser
+    /// Default is 5000 bytes which should be sufficient for most use cases
+    #[arg(long, default_value = "5000", verbatim_doc_comment)]
+    max_packet_size: u16,
+
 }
 
 fn main() {
@@ -120,7 +128,7 @@ fn main() {
     let input_signal = Arc::clone(&signaller);
 
     enable_raw_mode().unwrap();
-    let sniffer_handle = match Sniffer::new(interface, args.quiet, args.buffer) {
+    let sniffer_handle = match Sniffer::new(interface, args.quiet, args.buffer, args.max_packet_size) {
         Ok(sniffer) => std::thread::spawn(move || {
             sniffer.start(packet_parser_signal, sniffer_packet_info, packet_filter)
         }),
