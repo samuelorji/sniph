@@ -206,16 +206,12 @@ fn print_devices() {
     });
 
     let mut writer = BufWriter::new(std::io::stdout());
-    
 
     let max_device_name_length = devices
         .iter()
         .map(|d| d.name.len() + 2)
         .max()
         .unwrap_or(DEVICE_COLUMN_WIDTH);
-
-
-    
 
     DEVICE_COLUMN_WIDTH = DEVICE_COLUMN_WIDTH.max(max_device_name_length); // add some padding
 
