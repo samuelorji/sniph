@@ -197,7 +197,7 @@ fn read_user_input(signaller: Arc<Signaller>) {
     IP::UNCACHED("".to_string());
 }
 fn print_devices() {
-    const DEVICE_COLUMN_WIDTH: usize = 20;
+    let mut DEVICE_COLUMN_WIDTH: usize = 20;
     const ADDRESS_COLUMN_WIDTH: usize = 50;
 
     let devices = pcap::Device::list().unwrap_or_else(|e| {
@@ -208,6 +208,14 @@ fn print_devices() {
     let mut writer = BufWriter::new(std::io::stdout());
     let hyphen_line = format!("{}{}{}", "+", "-".repeat(74_usize), "+");
 
+    let max_device_name_length = devices
+        .iter()
+        .map(|d| d.name.len())
+        .max()
+        .unwrap_or(DEVICE_COLUMN_WIDTH);
+    
+
+    DEVICE_COLUMN_WIDTH = DEVICE_COLUMN_WIDTH.max(max_device_name_length + 2); // add some padding
     writer
         .write_all(format!("{}\n", hyphen_line).as_bytes())
         .unwrap();
