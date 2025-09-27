@@ -167,28 +167,42 @@ Simple and intuitive Packet Sniffing Program
 Usage: sniph [OPTIONS]
 
 Options:
-  -d, --devices                Prints devices or interfaces found on system and exits
-  -i, --interface <INTERFACE>  interface to sniff on. Will exit with an error if the interface cannot be found
-  -o, --output <OUTPUT>        Optional output folder where report will be written to. If no output is specified, no report is written output will be a folder with name report_YYYY_MM_DD_H_M_S containing a report in csv and 2 SVG files showing data and packet throughput
-  -b, --buffer <BUFFER>        size of print buffer, if set to 0, packets will be printed to stdout immediately.
-                               if set to a larger number, calls to stdout will be buffered up to this value and then written to stdout. [default: 1024]
-  -q, --quiet                  If captured packets should be printed to stdout in realtime, quiet mode can result in better performance as there won't be calls to print to console
-  -f, --filter <FILTER>        Filters to apply to captured packets E.g src_port > 8000 or dst_port < 4000
-                               Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
-                               Each filter should be in the format <field> <operator> <value>
-                               Supported fields: src_ip, dst_ip, src_port, dst_port, transport
-                               Supported operators: >, <, >=, <=, ==, !=
-                               Example: --filter "src_ip == 192.168.1.1"
-                               Example: --filter "src_port >= 8000, dst_port < 4000"
-                               Note: A space must exist between the field, operator and value
-                               Note: No spaces between commas and next filter
-                               If no filter is provided, all packets are captured
-                               == and != operators are string comparisons and only valid for IP addresses and protocol
-                               >, <, >=, <= operators are numeric comparisons and only valid for ports
-  -w, --window <WINDOW>        time window to group packet statistics together before writing to output file
-                               Not supplying a window means that statistics will be aggregated in memory for the entire length of the program running which can lead to increased memory consumption
-  -h, --help                   Print help
-  -V, --version                Print version
+  -d, --devices
+          Prints devices or interfaces found on system and exits
+  -i, --interface <INTERFACE>
+          interface to sniff on. Will exit with an error if the interface cannot be found
+  -o, --output <OUTPUT>
+          Optional output folder where report will be written to. If no output is specified, no report is written output will be a folder with name report_YYYY_MM_DD_H_M_S containing a report in csv and 2 SVG files showing data and packet throughput
+  -b, --buffer <BUFFER>
+          size of print buffer, if set to 0, packets will be printed to stdout immediately.
+          if set to a larger number, calls to stdout will be buffered up to this value and then written to stdout. [default: 1024]
+  -q, --quiet
+          If captured packets should be printed to stdout in realtime, quiet mode can result in better performance as there won't be calls to print to console
+  -f, --filter <FILTER>
+          Filters to apply to captured packets E.g src_port > 8000 or dst_port < 4000
+          Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
+          Each filter should be in the format <field> <operator> <value>
+          Supported fields: src_ip, dst_ip, src_port, dst_port, transport
+          Supported operators: >, <, >=, <=, ==, !=
+          Example: --filter "src_ip == 192.168.1.1"
+          Example: --filter "src_port >= 8000, dst_port < 4000"
+          Note: A space must exist between the field, operator and value
+          Note: No spaces between commas and next filter
+          If no filter is provided, all packets are captured
+          == and != operators are string comparisons and only valid for IP addresses and protocol
+          >, <, >=, <= operators are numeric comparisons and only valid for ports
+  -w, --window <WINDOW>
+          time window to group packet statistics together before writing to output file
+          Not supplying a window means that statistics will be aggregated in memory for the entire length of the program running which can lead to increased memory consumption
+      --max-packet-size <MAX_PACKET_SIZE>
+          Optional packet size limit for captured packets
+          Setting to a lower value can result in better performance as less data is copied from kernel space to user space
+          However, setting to a lower value means that some packets may be truncated and therefore dropped by the packet parser
+          Default is 5000 bytes which should be sufficient for most use cases [default: 5000]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 
