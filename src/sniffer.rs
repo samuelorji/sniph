@@ -24,10 +24,11 @@ pub struct Sniffer {
     device: Device,
     quiet: bool,
     stdout_buffer_size: usize,
+    max_packet_size: u16,
 }
 
 impl Sniffer {
-    pub fn new(interface: String, quiet: bool, buffer_size: u16) -> Result<Sniffer, String> {
+    pub fn new(interface: String, quiet: bool, buffer_size: u16, max_packet_size: u16) -> Result<Sniffer, String> {
         let mut adapter_as_device: Option<Device> = None;
         let devices = Device::list().expect("Could not list devices");
         for device in devices {
@@ -44,6 +45,7 @@ impl Sniffer {
                 device: adapter_as_device.unwrap(),
                 quiet,
                 stdout_buffer_size: buffer_size as usize,
+                max_packet_size,
             })
         }
     }
@@ -106,6 +108,7 @@ impl Sniffer {
         let mut received_bytes: u128 = 0;
         let mut packets_sent: u128 = 0;
         let mut packets_received: u128 = 0;
+        let mut dropped_packets: u128 = 0;
         let mut current_time_window: Arc<DateTime<Local>> = Arc::new(Local::now());
 
         let addresses = self
@@ -154,7 +157,7 @@ impl Sniffer {
             .unwrap()
             .promisc(true)
             .timeout(1000)
-            .snaplen(4000) // we only need the header, we don't need the body
+            .snaplen(self.max_packet_size as i32) 
             .immediate_mode(true)
             .open()
             .unwrap();
@@ -172,7 +175,7 @@ impl Sniffer {
                             .unwrap()
                             .promisc(true)
                             .timeout(1000)
-                            .snaplen(4000) // we only need the header, we don't need the body
+                            .snaplen(5000)
                             .immediate_mode(true)
                             .open()
                             .unwrap();
@@ -195,14 +198,15 @@ impl Sniffer {
                     }
                     writeln!(
                         writer,
-                        "\r\n\r\nCaptured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r",
+                        "\r\n\r\nCaptured Packets: {}\r\nSkipped Packets: {}\r\nBytes Transferred: {}\r\nBytes Received: {}\r\nPackets Sent: {}\r\nPackets Received: {}\r\nFiltered Packets: {}\r\nDropped Packets: {}\r",
                         captured_packets,
                         skipped_packets,
                         format_number_to_units(transferred_bytes) + "B",
                         format_number_to_units(received_bytes) + "B",
                         packets_sent,
                         packets_received,
-                        filtered_packets
+                        filtered_packets,
+                        dropped_packets
                     );
                     drop(signal);
                     break;
@@ -223,7 +227,15 @@ impl Sniffer {
                     let mut packet_size: u128 = packet.header.len as u128;
                     let mut skip = false;
                     let mut traffic_direction = TrafficDirection::OTHER;
-                    let headers = PacketHeaders::from_ethernet_slice(&packet.data).unwrap();
+
+                    let headers = match PacketHeaders::from_ethernet_slice(&packet.data) {
+                        Ok(headers) => headers,
+                        Err(_) => {
+                            // this mostly happens when we capture a packet whose size is greater than our snaplen, we can drop for now until we find a better solution that won't consume too much memory
+                            dropped_packets += 1;
+                            continue;
+                        }
+                    };
                     match headers.net {
                         None => continue,
                         Some(netHeaders) => {
