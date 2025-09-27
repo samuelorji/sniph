@@ -1,4 +1,5 @@
 use crate::models::TransportProtocol;
+use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct PacketFilter {
@@ -17,12 +18,45 @@ enum Either<A, B> {
     NOT(B),
 }
 
+impl Display for PacketFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let empty_string = String::new();
+        let src_ip_string = match self.src_ip {
+            None => empty_string.clone(),
+            Some(Either::IS(ref src_ip)) => format!("src_ip == {} ", &src_ip),
+            Some(Either::NOT(ref src_ip)) => format!("src_ip != {} ", &src_ip),
+        };
+        let dst_ip_string = match self.dst_ip {
+            None => empty_string.clone(),
+            Some(Either::IS(ref dst_ip)) => format!("dst_ip == {} ", &dst_ip),
+            Some(Either::NOT(ref dst_ip)) => format!("dst_ip != {} ", &dst_ip),
+        };
+        let transport_string = match self.transport_protocol {
+            None => empty_string.clone(),
+            Some(Either::IS(ref transport)) => format!("transport == {:?} ", &transport),
+            Some(Either::NOT(ref transport)) => format!("transport != {:?} ", &transport),
+        };
+
+        write!(
+            f,
+            "Filters [ {}{}{}src_port >= {} src_port <= {} dst_port >= {} dst_port <= {} ]",
+            src_ip_string,
+            dst_ip_string,
+            transport_string,
+            self.min_src_port,
+            self.max_src_port,
+            self.min_dst_port,
+            self.max_dst_port
+        )
+    }
+}
+
 impl PacketFilter {
     pub fn new(filter_string: &str) -> Result<PacketFilter, String> {
         let supported_fields = vec!["src_ip", "dst_ip", "src_port", "dst_port", "transport"];
         let supported_operators = vec![">", "<", ">=", "<=", "==", "!="];
 
-        let filters: Vec<&str> = filter_string.split(',').collect();
+        let filters: Vec<&str> = filter_string.split(',').map(|token| token.trim()).collect();
 
         if filters.len() > 10 {
             return Err(format!("Too many filters applied"));
@@ -37,7 +71,10 @@ impl PacketFilter {
         let mut transport_transport: Option<Either<TransportProtocol, TransportProtocol>> = None;
 
         for filter in filters {
-            let parts: Vec<&str> = filter.split_whitespace().collect();
+            let parts: Vec<&str> = filter
+                .split_whitespace()
+                .map(|token| token.trim())
+                .collect();
             if parts.len() != 3 {
                 return Err(format!("Invalid filter format: {}", filter));
             }
