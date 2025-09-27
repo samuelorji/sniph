@@ -206,16 +206,20 @@ fn print_devices() {
     });
 
     let mut writer = BufWriter::new(std::io::stdout());
-    let hyphen_line = format!("{}{}{}", "+", "-".repeat(74_usize), "+");
+    
 
     let max_device_name_length = devices
         .iter()
-        .map(|d| d.name.len())
+        .map(|d| d.name.len() + 2)
         .max()
         .unwrap_or(DEVICE_COLUMN_WIDTH);
+
+
     
 
-    DEVICE_COLUMN_WIDTH = DEVICE_COLUMN_WIDTH.max(max_device_name_length + 2); // add some padding
+    DEVICE_COLUMN_WIDTH = DEVICE_COLUMN_WIDTH.max(max_device_name_length); // add some padding
+
+    let hyphen_line = format!("{}{}{}", "+", "-".repeat(DEVICE_COLUMN_WIDTH + 54), "+");
     writer
         .write_all(format!("{}\n", hyphen_line).as_bytes())
         .unwrap();
