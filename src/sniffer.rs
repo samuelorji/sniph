@@ -27,7 +27,7 @@ pub struct Sniffer {
 }
 
 impl Sniffer {
-    pub fn new(interface: String, quiet: bool, buffer_size : u16) -> Result<Sniffer, String> {
+    pub fn new(interface: String, quiet: bool, buffer_size: u16) -> Result<Sniffer, String> {
         let mut adapter_as_device: Option<Device> = None;
         let devices = Device::list().expect("Could not list devices");
         for device in devices {
@@ -106,7 +106,7 @@ impl Sniffer {
         let mut received_bytes: u128 = 0;
         let mut packets_sent: u128 = 0;
         let mut packets_received: u128 = 0;
-        let mut current_time_window : Arc<DateTime<Local>> = Arc::new(Local::now());
+        let mut current_time_window: Arc<DateTime<Local>> = Arc::new(Local::now());
 
         let addresses = self
             .device

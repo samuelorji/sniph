@@ -21,34 +21,34 @@ use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 
-/// Packet Sniffing Program
+/// Simple and intuitive Packet Sniffing Program
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Prints devices found on system and exits
+    /// Prints devices or interfaces found on system and exits
     #[arg(short, long)]
     devices: bool,
 
-    /// interface to sniff
+    /// interface to sniff on. Will exit with an error if the interface cannot be found
     #[arg(short, long)]
     interface: Option<String>,
 
-    /// output folder where report will be written to.
-    /// output will be a csv file with name YYYY_MM_DD_H_M_S.csv
+    /// Optional output folder where report will be written to. If no output is specified, no report is written
+    /// output will be a folder with name report_YYYY_MM_DD_H_M_S containing a report in csv and 2 SVG files showing data and packet throughput
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    // size of print buffer, if set to 0, packets will be printed to stdout immediately.
-    // if set to a larger number, calls to stdout will be buffered up to this value and then written to stdout.
-    #[arg(short, long, default_value = "1024")]
+    /// size of print buffer, if set to 0, packets will be printed to stdout immediately.
+    /// if set to a larger number, calls to stdout will be buffered up to this value and then written to stdout.
+    #[arg(short, long, default_value = "1024", verbatim_doc_comment)]
     buffer: u16,
 
-    // If captured packets should be printed to stdout in realtime, quiet mode can result in better performance as there won't be calls to print to console
-    #[arg(short, long, default_value = "false")]
+    /// If captured packets should be printed to stdout in realtime, quiet mode can result in better performance as there won't be calls to print to console
+    #[arg(short, long, default_value = "false", verbatim_doc_comment)]
     quiet: bool,
 
-    /// Filters to apply to captured packets
-    /// E.g src_port > 8000 or dst_port < 4000 . Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
+    /// Filters to apply to captured packets E.g src_port > 8000 or dst_port < 4000
+    /// Multiple filters can be combined by commas (e.g src_ip > 8000, dst_ip < 4000)
     /// Each filter should be in the format <field> <operator> <value>
     /// Supported fields: src_ip, dst_ip, src_port, dst_port, transport
     /// Supported operators: >, <, >=, <=, ==, !=
@@ -87,10 +87,14 @@ fn main() {
 
     let packet_filter = match args.filter {
         None => None,
-        Some(filter_string) => Some(PacketFilter::new(&filter_string).unwrap_or_else(|e| {
-            eprintln!("{}", format!("Error: {}", e));
-            std::process::exit(1);
-        })),
+        Some(filter_string) => {
+            let filter = PacketFilter::new(&filter_string).unwrap_or_else(|e| {
+                eprintln!("{}", format!("Error: {}", e));
+                std::process::exit(1);
+            });
+            println!("The following Filter will be applied: {}", filter);
+            Some(filter)
+        }
     };
 
     let report_join_handle = match args.output {

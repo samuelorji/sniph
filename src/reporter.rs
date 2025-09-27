@@ -61,11 +61,8 @@ impl Reporter {
         let csv_write_interval = match time_interval_secs {
             None => Ok(None),
             Some(supplied_interval) => {
-                if supplied_interval > 60 || supplied_interval < 2 || supplied_interval % 2 != 0 {
-                    Err(
-                        "time window must be an even number not greater than 60 or less than 2"
-                            .to_string(),
-                    )
+                if supplied_interval % 2 != 0 {
+                    Err("time window must be an even number".to_string())
                 } else {
                     Ok(Some(supplied_interval / 2))
                 }
@@ -215,7 +212,12 @@ impl Reporter {
         drop(packet_info_mutex);
 
         if !local_stats.is_empty() {
-            Self::write_csv_output(&mut buf_writer, local_stats,current_write_time_window, &mut header_written);
+            Self::write_csv_output(
+                &mut buf_writer,
+                local_stats,
+                current_write_time_window,
+                &mut header_written,
+            );
         }
 
         // TODO
@@ -584,7 +586,6 @@ impl Reporter {
                     stats.start_time.format("%Y-%m-%d %H:%M:%S"),
                     stats.end_time.format("%Y-%m-%d %H:%M:%S"),
                     current_time_window.format("%Y-%m-%d %H:%M:%S")
-
                 )
                 .as_bytes(),
             );
