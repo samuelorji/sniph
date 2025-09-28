@@ -7,7 +7,7 @@ description = "Packet monitoring, filtering and analysis made simple and intuiti
 author = ["Samuel Orji"]
 categories = ["network-programming", "command-line-utilities", "concurrency", ]
 readme = "README.md"
-keywords = ["ip", "network", "packet", "tcpdump", "filter", "parser"]
+keywords = ["ip", "network", "packet", "tcpdump", "filter"]
 
 
 [dependencies]
