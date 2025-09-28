@@ -7,10 +7,15 @@
     <img alt="" src="./assets/logo_thumbnail.png" width="50%"/>
 </p>
 
+## Think tcpdump, but for humans 😄
+
 ## ✨ Features
 
-### Intuitive output 
-See packets in an easy to understand format.
+### Cross Platform and multi-threaded
+Sniph works on Linux, MacOS and Windows.
+
+### Beautiful and Intuitive output
+See packets in an easy to understand format. (subject to terminal width)
 ```bash
 ./sniph -i en0
 +-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -66,8 +71,6 @@ Generate a csv report of aggregated packets, as well as SVG images of data and p
 
 *Press `p` to pause capturing packets and `r` to resume capturing packets*
 
-
-
 #### and many more .............
 
 
@@ -98,6 +101,7 @@ cargo build --release
 
 
 ## 🚀 Quick Start
+> On Windows, the following commands will be `sniph.exe` instead of `sniph`
 ### List available network interfaces
 ```bash
 sniph -d
@@ -277,9 +281,8 @@ See Example:
 - No filters specified: default to permissive behavior
 
 ### Print to Console Behavior
-- If `quiet` is false, packets are printed to stdout in real-time
-- If `quiet` is true, printing is batched (better performance)
-- Print buffer size (`-b`) controls how many bytes are buffered before flushing to stdout
+- Packets are printed to console in a tabular format by default, but if you only want to write a report to an output folder and don't care about seeing packets in real-time, you can use the `-q` or `--quiet` flag to disable printing to console
+- Buffered printing controlled by (`-b` or `--buffer`)  controls how many bytes are buffered before flushing to stdout
 - Buffer size of 0 means immediate printing (no buffering)
 - Larger buffer sizes reduce the number of write calls to stdout, improving performance
 - Default buffer size is 1024 bytes

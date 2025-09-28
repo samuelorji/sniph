@@ -698,3 +698,323 @@ impl<'a> OutgoingPacketThroughputParams<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{IPVersion, TrafficDirection, TransportProtocol, IP, ApplicationProtocol};
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+    use std::time::Duration;
+    use tempfile::TempDir;
+
+    fn create_temp_reporter(interval: Option<u32>) -> (Reporter, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let reporter = Reporter::new(temp_dir.path().to_path_buf(), interval).unwrap();
+        (reporter, temp_dir)
+    }
+
+    fn create_sample_packet_info() -> Arc<Mutex<PacketInfo>> {
+        let mut packet_info = PacketInfo {
+            packet_mapping: IndexMap::new(),
+            stats: crate::models::PacketStatistics {
+                packets_sent: 100,
+                packets_received: 150,
+                transferred_bytes: 5000,
+                received_bytes: 7500,
+                captured_packets: 250,
+                skipped_packets: 0,
+                filtered_packets: 0,
+            },
+            current_write_time_window: Arc::new(Local::now()),
+        };
+
+        // Add sample packet link data
+        let link = PacketLink {
+            src_ip: IP::CACHED(Arc::from("192.168.1.1")),
+            dest_ip: IP::CACHED(Arc::from("192.168.1.2")),
+            src_port: 8080,
+            dest_port: 443,
+            transport_protocol: TransportProtocol::TCP,
+        };
+
+        let stats = PacketLinkStats {
+            ip_version: IPVersion::IPV4,
+            traffic_direction: TrafficDirection::OUTGOING,
+            num_packets: 50,
+            num_bytes: 2500,
+            start_time: Local::now() - TimeDelta::seconds(10),
+            end_time: Local::now(),
+            application_protocol: ApplicationProtocol::Other,
+        };
+
+        packet_info.packet_mapping.insert(link, stats);
+        Arc::new(Mutex::new(packet_info))
+    }
+
+    #[test]
+    fn test_new_reporter_valid_interval() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = Reporter::new(temp_dir.path().to_path_buf(), Some(4));
+        assert!(result.is_ok());
+
+        let reporter = result.unwrap();
+        assert_eq!(reporter.csv_write_interval, Some(2));
+        assert_eq!(reporter.wakeup_interval_secs, 2);
+    }
+
+    #[test]
+    fn test_new_reporter_invalid_odd_interval() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = Reporter::new(temp_dir.path().to_path_buf(), Some(3));
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap(), "time window must be an even number");
+    }
+
+    #[test]
+    fn test_new_reporter_no_interval() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = Reporter::new(temp_dir.path().to_path_buf(), None);
+        assert!(result.is_ok());
+
+        let reporter = result.unwrap();
+        assert_eq!(reporter.csv_write_interval, None);
+    }
+
+    #[test]
+    fn test_new_reporter_creates_directory_structure() {
+        let temp_dir = TempDir::new().unwrap();
+        let _reporter = Reporter::new(temp_dir.path().to_path_buf(), Some(4)).unwrap();
+
+        // Check that report directory was created
+        let entries: Vec<_> = std::fs::read_dir(temp_dir.path()).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+
+        let report_dir = entries[0].as_ref().unwrap().path();
+        assert!(report_dir.is_dir());
+        assert!(report_dir.file_name().unwrap().to_str().unwrap().starts_with("report_"));
+
+        // Check that CSV file exists
+        let csv_file = report_dir.join("report.csv");
+        assert!(csv_file.exists());
+    }
+
+    #[test]
+    fn test_write_csv_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_file = temp_dir.path().join("test.csv");
+        let file = File::create(&csv_file).unwrap();
+        let mut writer = BufWriter::new(&file);
+        let mut header_written = false;
+
+        let mut stats = IndexMap::new();
+         // Add sample packet link data
+        let link = PacketLink {
+            src_ip: IP::CACHED(Arc::from("192.168.1.1")),
+            dest_ip: IP::CACHED(Arc::from("192.168.1.2")),
+            src_port: 8080,
+            dest_port: 443,
+            transport_protocol: TransportProtocol::TCP,
+        };
+
+        let packet_stats = PacketLinkStats {
+            ip_version: IPVersion::IPV4,
+            traffic_direction: TrafficDirection::OUTGOING,
+            num_packets: 50,
+            num_bytes: 2500,
+            start_time: Local::now() - TimeDelta::seconds(10),
+            end_time: Local::now(),
+            application_protocol: ApplicationProtocol::Other,
+        };
+
+        stats.insert(link, packet_stats);
+        let time_window = Arc::new(Local::now());
+
+        Reporter::write_csv_output(&mut writer, stats, time_window, &mut header_written);
+
+        drop(writer);
+        let content = std::fs::read_to_string(&csv_file).unwrap();
+        
+        assert!(header_written);
+        assert!(content.contains("src_ip,dest_ip,src_port,dest_port"));
+        assert!(content.contains("192.168.1.1,192.168.1.2,8080,443"));
+        assert!(content.contains("IPV4,TCP,OUTGOING,50,2500"));
+    }
+
+    #[test]
+    fn test_write_csv_output_header_only_once() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_file = temp_dir.path().join("test.csv");
+        let file = File::create(&csv_file).unwrap();
+        let mut writer = BufWriter::new(&file);
+        let mut header_written = false;
+
+        // First write
+        let stats = IndexMap::new();
+        let time_window = Arc::new(Local::now());
+        Reporter::write_csv_output(&mut writer, stats, time_window.clone(), &mut header_written);
+
+         let stats = IndexMap::new();
+        let time_window = Arc::new(Local::now());
+        // Second write
+        Reporter::write_csv_output(&mut writer, stats, time_window, &mut header_written);
+
+        drop(writer);
+        let content = std::fs::read_to_string(&csv_file).unwrap();
+        
+        // Header should only appear once
+        let header_count = content.matches("src_ip,dest_ip,src_port,dest_port").count();
+        assert_eq!(header_count, 1);
+    }
+
+
+
+    #[test]
+    fn test_data_throughput_graph_generation() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let start_time = Local::now();
+        let mut outgoing_params = OutgoingDataThroughputParams::new(&start_time);
+        let mut incoming_params = IncomingDataThroughputParams::new(&start_time);
+
+        // Simulate some data
+        outgoing_params.current_max_data_point = 1000;
+        incoming_params.current_max_data_point = 1500;
+
+        let result = reporter.write_data_throughput_report(&mut outgoing_params, &mut incoming_params);
+        assert!(result.is_ok());
+
+        // Check that SVG file was created
+        assert!(std::path::Path::new(&reporter.data_throughput_file).exists());
+
+        // Read and verify SVG content contains expected elements
+        let svg_content = std::fs::read_to_string(&reporter.data_throughput_file).unwrap();
+        assert!(svg_content.contains("Outgoing Traffic Throughput"));
+        assert!(svg_content.contains("Incoming Traffic Throughput"));
+        assert!(svg_content.contains("bytes/s"));
+    }
+
+    #[test]
+    fn test_packet_throughput_graph_generation() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let start_time = Local::now();
+        let mut outgoing_params = OutgoingPacketThroughputParams::new(&start_time);
+        let mut incoming_params = IncomingPacketThroughputParams::new(&start_time);
+
+        // Simulate some packet data
+        outgoing_params.current_max_data_point = 100;
+        incoming_params.current_max_data_point = 150;
+
+        let result = reporter.write_packet_throughput_report(&mut outgoing_params, &mut incoming_params);
+        assert!(result.is_ok());
+
+        // Check that SVG file was created
+        assert!(std::path::Path::new(&reporter.packet_throughput_file).exists());
+
+        // Read and verify SVG content
+        let svg_content = std::fs::read_to_string(&reporter.packet_throughput_file).unwrap();
+        assert!(svg_content.contains("Outgoing Traffic Throughput: Packets/second"));
+        assert!(svg_content.contains("Incoming Traffic Throughput: Packets/second"));
+    }
+
+    #[test]
+    fn test_reporter_start_with_immediate_stop() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let packet_info = create_sample_packet_info();
+        
+        let signaller = Arc::new(ReporterSignaller {
+            mutex: Mutex::new(ReporterStatus::STOPPED),
+            condvar: Default::default(),
+        });
+
+        // This should exit immediately since status is STOPPED
+        reporter.start(packet_info, signaller);
+
+        // Verify CSV file has content
+        let csv_path = std::fs::read_dir(&reporter.output_folder)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path()
+            .join("report.csv");
+        
+        let csv_content = std::fs::read_to_string(&csv_path).unwrap();
+        assert!(csv_content.contains("src_ip,dest_ip"));
+        assert!(csv_content.contains("192.168.1.1,192.168.1.2"));
+    }
+
+    #[test]
+    fn test_reporter_lifecycle() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let packet_info = create_sample_packet_info();
+        
+        let signaller = Arc::new(ReporterSignaller {
+            mutex: Mutex::new(ReporterStatus::RUNNING),
+            condvar: Default::default(),
+        });
+
+        let signaller_clone = signaller.clone();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_clone = stopped.clone();
+
+        // Start reporter in separate thread
+        let reporter_thread = thread::spawn(move || {
+            reporter.start(packet_info, signaller_clone);
+            stopped_clone.store(true, Ordering::SeqCst);
+        });
+
+        // Let it run briefly
+        thread::sleep(Duration::from_millis(100));
+
+        // Stop the reporter
+        {
+            let mut status = signaller.mutex.lock().unwrap();
+            *status = ReporterStatus::STOPPED;
+            signaller.condvar.notify_all();
+        }
+
+        // Wait for thread to complete
+        reporter_thread.join().unwrap();
+        
+        // Verify it actually stopped
+        assert!(stopped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_write_report_logic() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4)); // interval = 2
+        let mut packet_info = create_sample_packet_info();
+        let mut header_written = false;
+        let mut csv_interval_counter = 2; // At the interval threshold
+        let csv_file = File::create(_temp_dir.path().join("test.csv")).unwrap();
+        let mut buf_writer = BufWriter::new(&csv_file);
+        let mut data_throughput_graph_error = String::new();
+        let start_time = Local::now();
+        let mut outgoing_data = OutgoingDataThroughputParams::new(&start_time);
+        let mut incoming_data = IncomingDataThroughputParams::new(&start_time);
+        let mut outgoing_packet = OutgoingPacketThroughputParams::new(&start_time);
+        let mut incoming_packet = IncomingPacketThroughputParams::new(&start_time);
+
+        reporter.write_report(
+            &mut packet_info,
+            &mut header_written,
+            &mut csv_interval_counter,
+            &mut buf_writer,
+            false,
+            &mut data_throughput_graph_error,
+            &mut outgoing_data,
+            &mut incoming_data,
+            &mut outgoing_packet,
+            &mut incoming_packet,
+        );
+
+        // Counter should be reset to 0 when at interval, since we just wrote data
+        assert_eq!(csv_interval_counter, 0);
+        assert!(header_written);
+        
+        // Packet mapping should be cleared after writing
+        let packet_info_guard = packet_info.lock().unwrap();
+        assert!(packet_info_guard.packet_mapping.is_empty());
+    }
+}
