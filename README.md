@@ -1,7 +1,7 @@
-# Sniph - Network analysis, monitoring and filtering made fast,simple and intuitive
+# Sniph - Packet monitoring, filtering and analysis made simple and intuitive
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Rust](https://img.shields.io/badge/rust-1.90+-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.86+-orange.svg)](https://www.rust-lang.org/)
 
 <p align="center">
     <img alt="" src="./assets/logo_thumbnail.png" width="50%"/>
@@ -75,55 +75,20 @@ Generate a csv report of aggregated packets, as well as SVG images of data and p
 
 ### Prerequisites
 
-Check what's needed for your OS to run sniph
+#### Rust
 
-<details>
-
-  <summary>MacOs <img alt="" src="./assets/macos_thumbnail.jpeg" width="30px"/></summary>
-
-  <br>
-  MacOS natively has all the dependencies you need to build and run sniph!
-
-</details>
-<details>
-
-  <summary>Windows <img alt="" src="./assets/windows.png" width="30px"/></summary>
-
-  <br>
-  The following needs to be installed for sniph to run properly:
-
-- Install npcap and download the SDK [npcap](https://npcap.com/#download).
-
-- Add the SDK's ```/Lib``` or ```/Lib/x64``` folder to your ```LIB``` environment variable.
-
-</details>
+Make sure you have Rust (1.86+) and Cargo installed. You can install them using [here](https://rust-lang.org/tools/install/).
 
 
-<details>
+#### OS Specific Dependencies
+See installation instructions for your in the [installation guide](INSTALL.md). 
 
-  <summary>Linux <img alt="" src="./assets/linux_thumbnail.png" width="30px"/></summary>
-
-  <br> 
-  In order to build and run Sniffnet on Linux systems, install the libraries and header files for the libpcap library. For example:
-
-The following need to be libraries need to be installed for `libpcap` (with the appropriate package manager) which is needed for sniph to run.
-
-
-- On Fedora Linux: ```install libpcap-devel```.
-
-- On Debian based Linux: ```install libpcap-dev```.
-
-
-> If you're not running as root, you will need to set capabilities like so: ```sudo setcap cap_net_raw,cap_net_admin=eip path/to/bin```, where `path/to/bin` is where sniff is installed
-
-</details>
-
-### Installation via Cargo
+#### Installation via Cargo
 ```bash
 cargo install sniph
 ```
 
-### Build from source
+#### Build from source
 ```bash
 git clone https://github.com/samuelorji/sniph.git
 cd sniph
@@ -288,18 +253,6 @@ See Example:
 </p>
 
 
-
-
-
-## 📦 Installation
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-sniph = "0.1.0"
-```
-
 ## ⚖️ Behavior Details
 
 ### Port Range Defaults
@@ -353,3 +306,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ```
+
+### Contributing
+
+We welcome contributions to Sniph! Please see the [contributing guide](CONTRIBUTING.md) file for more information on how to get involved.
