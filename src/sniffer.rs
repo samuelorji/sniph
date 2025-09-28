@@ -523,3 +523,27 @@ impl Sniffer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_multicast_address() {
+        // IPv4 multicast addresses
+        assert!(Sniffer::is_multicast_address("224.0.0.1"));
+        assert!(Sniffer::is_multicast_address("239.255.255.255"));
+        assert!(!Sniffer::is_multicast_address("192.168.1.1"));
+        assert!(!Sniffer::is_multicast_address("10.0.0.1"));
+        assert!(!Sniffer::is_multicast_address("172.16.0.1"));
+        assert!(!Sniffer::is_multicast_address("192.0.2.1"));
+        assert!(!Sniffer::is_multicast_address("203.0.113.1"));
+        assert!(!Sniffer::is_multicast_address("198.51.100.1"));
+        assert!(!Sniffer::is_multicast_address("192.0.2.1"));
+        assert!(!Sniffer::is_multicast_address("203.0.113.1"));
+        assert!(!Sniffer::is_multicast_address("2a00:1450:4001:829::200e")); // IPv6 address
+        assert!(Sniffer::is_multicast_address("ff02::1")); // IPv6 multicast address
+
+    }
+
+}

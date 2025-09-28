@@ -7,7 +7,7 @@ description = "Packet monitoring, filtering and analysis made simple and intuiti
 author = ["Samuel Orji"]
 categories = ["network-programming", "command-line-utilities", "concurrency", ]
 readme = "README.md"
-keywords = ["ip", "network", "packet", "sniffer", "filter", "parser"]
+keywords = ["ip", "network", "packet", "tcpdump", "filter", "parser"]
 
 
 [dependencies]
@@ -19,9 +19,7 @@ crossterm = "0.29.0"
 indexmap = "2.11.3"
 prettify_ip = "0.1.2"
 plotters = "0.3.7"
-rand = "0.10.0-rc.0"
 
 
 [dev-dependencies]
 tempfile = "3.8"
-mockall = "0.12"

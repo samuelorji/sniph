@@ -842,254 +842,179 @@ mod tests {
         assert!(content.contains("IPV4,TCP,OUTGOING,50,2500"));
     }
 
-    // #[test]
-    // fn test_write_csv_output_header_only_once() {
-    //     let temp_dir = TempDir::new().unwrap();
-    //     let csv_file = temp_dir.path().join("test.csv");
-    //     let file = File::create(&csv_file).unwrap();
-    //     let mut writer = BufWriter::new(&file);
-    //     let mut header_written = false;
+    #[test]
+    fn test_write_csv_output_header_only_once() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_file = temp_dir.path().join("test.csv");
+        let file = File::create(&csv_file).unwrap();
+        let mut writer = BufWriter::new(&file);
+        let mut header_written = false;
 
-    //     // First write
-    //     let stats = IndexMap::new();
-    //     let time_window = Arc::new(Local::now());
-    //     Reporter::write_csv_output(&mut writer, stats.clone(), time_window.clone(), &mut header_written);
+        // First write
+        let stats = IndexMap::new();
+        let time_window = Arc::new(Local::now());
+        Reporter::write_csv_output(&mut writer, stats, time_window.clone(), &mut header_written);
 
-    //     // Second write
-    //     Reporter::write_csv_output(&mut writer, stats, time_window, &mut header_written);
+         let stats = IndexMap::new();
+        let time_window = Arc::new(Local::now());
+        // Second write
+        Reporter::write_csv_output(&mut writer, stats, time_window, &mut header_written);
 
-    //     drop(writer);
-    //     let content = std::fs::read_to_string(&csv_file).unwrap();
+        drop(writer);
+        let content = std::fs::read_to_string(&csv_file).unwrap();
         
-    //     // Header should only appear once
-    //     let header_count = content.matches("src_ip,dest_ip,src_port,dest_port").count();
-    //     assert_eq!(header_count, 1);
-    // }
+        // Header should only appear once
+        let header_count = content.matches("src_ip,dest_ip,src_port,dest_port").count();
+        assert_eq!(header_count, 1);
+    }
 
-    // #[test]
-    // fn test_throughput_params_initialization() {
-    //     let start_time = Local::now();
-    //     let outgoing_params = OutgoingDataThroughputParams::new(&start_time);
 
-    //     assert_eq!(outgoing_params.time_in_seconds_since_start, 0);
-    //     assert_eq!(outgoing_params.current_max_data_point, 0);
-    //     assert_eq!(outgoing_params.previous_data_point, 0);
-    //     assert_eq!(outgoing_params.largest_throughput_delta, 0);
-    //     assert_eq!(outgoing_params.chart_update_time_interval_secs, 2);
-    //     assert_eq!(outgoing_params.throughput_record.len(), 1);
-    //     assert_eq!(outgoing_params.throughput_record[0], (0, 0));
-    // }
 
-    // #[test]
-    // fn test_data_throughput_graph_generation() {
-    //     let (reporter, _temp_dir) = create_temp_reporter(Some(4));
-    //     let start_time = Local::now();
-    //     let mut outgoing_params = OutgoingDataThroughputParams::new(&start_time);
-    //     let mut incoming_params = IncomingDataThroughputParams::new(&start_time);
+    #[test]
+    fn test_data_throughput_graph_generation() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let start_time = Local::now();
+        let mut outgoing_params = OutgoingDataThroughputParams::new(&start_time);
+        let mut incoming_params = IncomingDataThroughputParams::new(&start_time);
 
-    //     // Simulate some data
-    //     outgoing_params.current_max_data_point = 1000;
-    //     incoming_params.current_max_data_point = 1500;
+        // Simulate some data
+        outgoing_params.current_max_data_point = 1000;
+        incoming_params.current_max_data_point = 1500;
 
-    //     let result = reporter.write_data_throughput_report(&mut outgoing_params, &mut incoming_params);
-    //     assert!(result.is_ok());
+        let result = reporter.write_data_throughput_report(&mut outgoing_params, &mut incoming_params);
+        assert!(result.is_ok());
 
-    //     // Check that SVG file was created
-    //     assert!(std::path::Path::new(&reporter.data_throughput_file).exists());
+        // Check that SVG file was created
+        assert!(std::path::Path::new(&reporter.data_throughput_file).exists());
 
-    //     // Read and verify SVG content contains expected elements
-    //     let svg_content = std::fs::read_to_string(&reporter.data_throughput_file).unwrap();
-    //     assert!(svg_content.contains("Outgoing Traffic Throughput"));
-    //     assert!(svg_content.contains("Incoming Traffic Throughput"));
-    //     assert!(svg_content.contains("bytes/s"));
-    // }
+        // Read and verify SVG content contains expected elements
+        let svg_content = std::fs::read_to_string(&reporter.data_throughput_file).unwrap();
+        assert!(svg_content.contains("Outgoing Traffic Throughput"));
+        assert!(svg_content.contains("Incoming Traffic Throughput"));
+        assert!(svg_content.contains("bytes/s"));
+    }
 
-    // #[test]
-    // fn test_packet_throughput_graph_generation() {
-    //     let (reporter, _temp_dir) = create_temp_reporter(Some(4));
-    //     let start_time = Local::now();
-    //     let mut outgoing_params = OutgoingPacketThroughputParams::new(&start_time);
-    //     let mut incoming_params = IncomingPacketThroughputParams::new(&start_time);
+    #[test]
+    fn test_packet_throughput_graph_generation() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let start_time = Local::now();
+        let mut outgoing_params = OutgoingPacketThroughputParams::new(&start_time);
+        let mut incoming_params = IncomingPacketThroughputParams::new(&start_time);
 
-    //     // Simulate some packet data
-    //     outgoing_params.current_max_data_point = 100;
-    //     incoming_params.current_max_data_point = 150;
+        // Simulate some packet data
+        outgoing_params.current_max_data_point = 100;
+        incoming_params.current_max_data_point = 150;
 
-    //     let result = reporter.write_packet_throughput_report(&mut outgoing_params, &mut incoming_params);
-    //     assert!(result.is_ok());
+        let result = reporter.write_packet_throughput_report(&mut outgoing_params, &mut incoming_params);
+        assert!(result.is_ok());
 
-    //     // Check that SVG file was created
-    //     assert!(std::path::Path::new(&reporter.packet_throughput_file).exists());
+        // Check that SVG file was created
+        assert!(std::path::Path::new(&reporter.packet_throughput_file).exists());
 
-    //     // Read and verify SVG content
-    //     let svg_content = std::fs::read_to_string(&reporter.packet_throughput_file).unwrap();
-    //     assert!(svg_content.contains("Outgoing Traffic Throughput: Packets/second"));
-    //     assert!(svg_content.contains("Incoming Traffic Throughput: Packets/second"));
-    // }
+        // Read and verify SVG content
+        let svg_content = std::fs::read_to_string(&reporter.packet_throughput_file).unwrap();
+        assert!(svg_content.contains("Outgoing Traffic Throughput: Packets/second"));
+        assert!(svg_content.contains("Incoming Traffic Throughput: Packets/second"));
+    }
 
-    // #[test]
-    // fn test_reporter_start_with_immediate_stop() {
-    //     let (reporter, _temp_dir) = create_temp_reporter(Some(4));
-    //     let packet_info = create_sample_packet_info();
+    #[test]
+    fn test_reporter_start_with_immediate_stop() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let packet_info = create_sample_packet_info();
         
-    //     let signaller = Arc::new(ReporterSignaller {
-    //         mutex: Arc::new(Mutex::new(ReporterStatus::STOPPED)),
-    //         condvar: Default::default(),
-    //     });
+        let signaller = Arc::new(ReporterSignaller {
+            mutex: Mutex::new(ReporterStatus::STOPPED),
+            condvar: Default::default(),
+        });
 
-    //     // This should exit immediately since status is STOPPED
-    //     reporter.start(packet_info, signaller);
+        // This should exit immediately since status is STOPPED
+        reporter.start(packet_info, signaller);
 
-    //     // Verify CSV file has content
-    //     let csv_path = std::fs::read_dir(&reporter.output_folder)
-    //         .unwrap()
-    //         .next()
-    //         .unwrap()
-    //         .unwrap()
-    //         .path()
-    //         .join("report.csv");
+        // Verify CSV file has content
+        let csv_path = std::fs::read_dir(&reporter.output_folder)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path()
+            .join("report.csv");
         
-    //     let csv_content = std::fs::read_to_string(&csv_path).unwrap();
-    //     assert!(csv_content.contains("src_ip,dest_ip"));
-    //     assert!(csv_content.contains("192.168.1.1,192.168.1.2"));
-    // }
+        let csv_content = std::fs::read_to_string(&csv_path).unwrap();
+        assert!(csv_content.contains("src_ip,dest_ip"));
+        assert!(csv_content.contains("192.168.1.1,192.168.1.2"));
+    }
 
-    // #[test]
-    // fn test_reporter_lifecycle() {
-    //     let (reporter, _temp_dir) = create_temp_reporter(Some(4));
-    //     let packet_info = create_sample_packet_info();
+    #[test]
+    fn test_reporter_lifecycle() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4));
+        let packet_info = create_sample_packet_info();
         
-    //     let signaller = Arc::new(ReporterSignaller {
-    //         mutex: Arc::new(Mutex::new(ReporterStatus::RUNNING)),
-    //         condvar: Default::default(),
-    //     });
+        let signaller = Arc::new(ReporterSignaller {
+            mutex: Mutex::new(ReporterStatus::RUNNING),
+            condvar: Default::default(),
+        });
 
-    //     let signaller_clone = signaller.clone();
-    //     let stopped = Arc::new(AtomicBool::new(false));
-    //     let stopped_clone = stopped.clone();
+        let signaller_clone = signaller.clone();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_clone = stopped.clone();
 
-    //     // Start reporter in separate thread
-    //     let reporter_thread = thread::spawn(move || {
-    //         reporter.start(packet_info, signaller_clone);
-    //         stopped_clone.store(true, Ordering::SeqCst);
-    //     });
+        // Start reporter in separate thread
+        let reporter_thread = thread::spawn(move || {
+            reporter.start(packet_info, signaller_clone);
+            stopped_clone.store(true, Ordering::SeqCst);
+        });
 
-    //     // Let it run briefly
-    //     thread::sleep(Duration::from_millis(100));
+        // Let it run briefly
+        thread::sleep(Duration::from_millis(100));
 
-    //     // Stop the reporter
-    //     {
-    //         let mut status = signaller.mutex.lock().unwrap();
-    //         *status = ReporterStatus::STOPPED;
-    //         signaller.condvar.notify_all();
-    //     }
+        // Stop the reporter
+        {
+            let mut status = signaller.mutex.lock().unwrap();
+            *status = ReporterStatus::STOPPED;
+            signaller.condvar.notify_all();
+        }
 
-    //     // Wait for thread to complete
-    //     reporter_thread.join().unwrap();
+        // Wait for thread to complete
+        reporter_thread.join().unwrap();
         
-    //     // Verify it actually stopped
-    //     assert!(stopped.load(Ordering::SeqCst));
-    // }
+        // Verify it actually stopped
+        assert!(stopped.load(Ordering::SeqCst));
+    }
 
-    // #[test]
-    // fn test_write_report_interval_logic() {
-    //     let (reporter, _temp_dir) = create_temp_reporter(Some(4)); // interval = 2
-    //     let mut packet_info = create_sample_packet_info();
-    //     let mut header_written = false;
-    //     let mut csv_interval_counter = 2; // At the interval threshold
-    //     let csv_file = File::create(_temp_dir.path().join("test.csv")).unwrap();
-    //     let mut buf_writer = BufWriter::new(&csv_file);
-    //     let mut data_throughput_graph_error = String::new();
-    //     let start_time = Local::now();
-    //     let mut outgoing_data = OutgoingDataThroughputParams::new(&start_time);
-    //     let mut incoming_data = IncomingDataThroughputParams::new(&start_time);
-    //     let mut outgoing_packet = OutgoingPacketThroughputParams::new(&start_time);
-    //     let mut incoming_packet = IncomingPacketThroughputParams::new(&start_time);
+    #[test]
+    fn test_write_report_logic() {
+        let (reporter, _temp_dir) = create_temp_reporter(Some(4)); // interval = 2
+        let mut packet_info = create_sample_packet_info();
+        let mut header_written = false;
+        let mut csv_interval_counter = 2; // At the interval threshold
+        let csv_file = File::create(_temp_dir.path().join("test.csv")).unwrap();
+        let mut buf_writer = BufWriter::new(&csv_file);
+        let mut data_throughput_graph_error = String::new();
+        let start_time = Local::now();
+        let mut outgoing_data = OutgoingDataThroughputParams::new(&start_time);
+        let mut incoming_data = IncomingDataThroughputParams::new(&start_time);
+        let mut outgoing_packet = OutgoingPacketThroughputParams::new(&start_time);
+        let mut incoming_packet = IncomingPacketThroughputParams::new(&start_time);
 
-    //     reporter.write_report(
-    //         &mut packet_info,
-    //         &mut header_written,
-    //         &mut csv_interval_counter,
-    //         &mut buf_writer,
-    //         false,
-    //         &mut data_throughput_graph_error,
-    //         &mut outgoing_data,
-    //         &mut incoming_data,
-    //         &mut outgoing_packet,
-    //         &mut incoming_packet,
-    //     );
+        reporter.write_report(
+            &mut packet_info,
+            &mut header_written,
+            &mut csv_interval_counter,
+            &mut buf_writer,
+            false,
+            &mut data_throughput_graph_error,
+            &mut outgoing_data,
+            &mut incoming_data,
+            &mut outgoing_packet,
+            &mut incoming_packet,
+        );
 
-    //     // Counter should be reset to 0 when at interval
-    //     assert_eq!(csv_interval_counter, 0);
-    //     assert!(header_written);
+        // Counter should be reset to 0 when at interval, since we just wrote data
+        assert_eq!(csv_interval_counter, 0);
+        assert!(header_written);
         
-    //     // Packet mapping should be cleared after writing
-    //     let packet_info_guard = packet_info.lock().unwrap();
-    //     assert!(packet_info_guard.packet_mapping.is_empty());
-    // }
-
-    // #[test]
-    // fn test_multiple_transport_protocols() {
-    //     let temp_dir = TempDir::new().unwrap();
-    //     let csv_file = temp_dir.path().join("test.csv");
-    //     let file = File::create(&csv_file).unwrap();
-    //     let mut writer = BufWriter::new(&file);
-    //     let mut header_written = false;
-
-    //     let mut stats = IndexMap::new();
-        
-    //     // TCP link
-    //     let tcp_link = PacketLink {
-    //         src_ip: "192.168.1.1".to_string(),
-    //         dest_ip: "192.168.1.2".to_string(),
-    //         src_port: 80,
-    //         dest_port: 443,
-    //         transport_protocol: TransportProtocol::TCP,
-    //     };
-
-    //     // UDP link
-    //     let udp_link = PacketLink {
-    //         src_ip: "10.0.0.1".to_string(),
-    //         dest_ip: "10.0.0.2".to_string(),
-    //         src_port: 53,
-    //         dest_port: 8080,
-    //         transport_protocol: TransportProtocol::UDP,
-    //     };
-
-    //     let tcp_stats = PacketLinkStats {
-    //         ip_version: IpVersion::V4,
-    //         traffic_direction: TrafficDirection::Outgoing,
-    //         num_packets: 30,
-    //         num_bytes: 2000,
-    //         start_time: Local::now() - TimeDelta::seconds(5),
-    //         end_time: Local::now(),
-    //     };
-
-    //     let udp_stats = PacketLinkStats {
-    //         ip_version: IpVersion::V6,
-    //         traffic_direction: TrafficDirection::Incoming,
-    //         num_packets: 15,
-    //         num_bytes: 800,
-    //         start_time: Local::now() - TimeDelta::seconds(3),
-    //         end_time: Local::now(),
-    //     };
-
-    //     stats.insert(tcp_link, tcp_stats);
-    //     stats.insert(udp_link, udp_stats);
-
-    //     let time_window = Arc::new(Local::now());
-    //     Reporter::write_csv_output(&mut writer, stats, time_window, &mut header_written);
-
-    //     drop(writer);
-    //     let content = std::fs::read_to_string(&csv_file).unwrap();
-        
-    //     assert!(content.contains("TCP"));
-    //     assert!(content.contains("UDP"));
-    //     assert!(content.contains("V4"));
-    //     assert!(content.contains("V6"));
-    //     assert!(content.contains("Outgoing"));
-    //     assert!(content.contains("Incoming"));
-    // }
-
-
+        // Packet mapping should be cleared after writing
+        let packet_info_guard = packet_info.lock().unwrap();
+        assert!(packet_info_guard.packet_mapping.is_empty());
+    }
 }
