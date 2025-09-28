@@ -9,6 +9,9 @@
 
 ## ✨ Features
 
+### Cross Platform
+Sniph works on Linux, MacOS and Windows.
+
 ### Intuitive output 
 See packets in an easy to understand format.
 ```bash

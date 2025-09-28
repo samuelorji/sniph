@@ -189,7 +189,7 @@ impl PacketLinkStats {
     }
 }
 
-pub struct PacketStatistics {
+pub(crate) struct PacketStatistics {
     pub captured_packets: u128,
     pub skipped_packets: u128,
     pub filtered_packets: u128,
@@ -247,7 +247,7 @@ impl ReporterSignaller {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum IP {
+pub(crate) enum IP {
     CACHED(Arc<str>),
     UNCACHED(String),
 }
