@@ -8,6 +8,7 @@ Before building and running `sniph`, ensure that you have the necessary OS-speci
 
 > If you're not running as root, you will need to set capabilities like so: ```sudo setcap cap_net_raw,cap_net_admin=eip path/to/bin```, where `path/to/bin` is where sniff is installed
 
+[Here's another possible error you might encounter](https://github.com/samuelorji/sniph?tab=readme-ov-file#pcap-permission-denied-error)
 
 ## Windows
 
@@ -28,3 +29,5 @@ You'll need to install Npcap, which is a packet capture library for Windows.
 ## MacOS
 
 Macos comes with all the dependencies you need to run sniph
+
+[Here's another possible error you might encounter](https://github.com/samuelorji/sniph?tab=readme-ov-file#pcap-permission-denied-error)
