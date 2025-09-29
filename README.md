@@ -87,6 +87,13 @@ Make sure you have Rust (1.86+) and Cargo installed. You can install them using 
 See installation instructions for your in the [installation guide](INSTALL.md). 
 
 #### Installation via Cargo
+
+#### Ensure you have the latest version of Cargo.
+
+> rustup update
+
+Then run the following command to install sniph:
+
 ```bash
 cargo install sniph
 ```
@@ -286,6 +293,32 @@ See Example:
 - Buffer size of 0 means immediate printing (no buffering)
 - Larger buffer sizes reduce the number of write calls to stdout, improving performance
 - Default buffer size is 1024 bytes
+
+
+## Possible Errors and Solutions
+
+### Pcap Permission denied error
+
+You may incur the following error when trying to run sniph on Unix based systems (Linux and MacOS):
+
+> PcapError("Cannot open BPF device /dev/bpf0: Permission denied (os error 13)")
+
+This is due to insufficient permissions to access the BPF devices on your system.
+
+To fix this, the user running sniph must have read and write permissions to the BPF devices.
+
+this can be done by changing the ownership of the BPF devices to the user running sniph.
+
+```bash
+sudo chown <username> /dev/bp*
+```
+Where `<username>` can be retrieved with the command `whoami`
+
+Another way to solve this is to run Sniph as root:
+
+```bash
+sudo sniph [OPTIONS]
+```
 
 
 ## 📄 License

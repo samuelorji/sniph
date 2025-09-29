@@ -159,8 +159,19 @@ impl Sniffer {
             .timeout(1000)
             .snaplen(self.max_packet_size as i32) 
             .immediate_mode(true)
-            .open()
-            .unwrap();
+            .open();
+
+        let mut cap = match cap {
+            Err(e) => {
+                eprintln!("Error opening device {}: {}", device_name, e);
+                std::process::exit(1);
+            }
+            Ok(capture) => capture,
+        };
+
+
+
+
 
         let mut was_paused = false;
 
