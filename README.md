@@ -86,6 +86,19 @@ Make sure you have Rust (1.86+) and Cargo installed. You can install them using 
 #### OS Specific Dependencies
 See installation instructions for your in the [installation guide](INSTALL.md). 
 
+#### Install via Homebrew (MacOS)
+
+add the tap
+```bash
+brew tap samuelorji/sniph
+```
+
+then install
+
+```bash
+brew install sniph
+```
+
 #### Installation via Cargo
 
 #### Ensure you have the latest version of Cargo.
