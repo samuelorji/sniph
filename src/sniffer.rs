@@ -7,6 +7,7 @@ use crate::sniffed_packet::SniffedPacket;
 use crate::utils::format_number_to_units;
 use chrono::{DateTime, Local};
 use clap::builder::Str;
+use crossterm::terminal::disable_raw_mode;
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
 use pcap::{Capture, Device};
 use std::collections::HashMap;
@@ -163,7 +164,8 @@ impl Sniffer {
 
         let mut cap = match cap {
             Err(e) => {
-                eprintln!("Error opening device {}: {}", device_name, e);
+                eprintln!("Error opening device {}: {}\r", device_name, e);
+                let _ = disable_raw_mode();
                 std::process::exit(1);
             }
             Ok(capture) => capture,
